@@ -4,7 +4,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from waba_api.src.database.models.base import Base
-from waba_api.src.database.models.MetaModels import Messages
+from waba_api.src.database.models.MetaModels import LeadBinding, Messages
 from waba_api.src.settings.engine import async_session_maker
 
 
@@ -82,3 +82,29 @@ class MessagesDAO(BaseDAO):
                 new_items = [cls.model(**v) for v in values_list]
                 session.add_all(new_items)
             return new_items
+
+class LeadBindingDAO(BaseDAO):
+    model = LeadBinding
+
+    @classmethod
+    async def get_lead(cls, user_number: int, operator_number: int) -> Optional[int]:
+        async with await cls.get_session() as session:
+            result = await session.execute(
+                select(LeadBinding.lead_id).where(
+                    LeadBinding.user_number == user_number,
+                    LeadBinding.operator_number == operator_number
+                )
+            )
+            lead_id = result.scalar_one_or_none()
+            return lead_id
+
+    @classmethod
+    async def add_binding(cls, user_number: int, operator_number: int, lead_id: int) -> None:
+        async with await cls.get_session() as session:
+            binding = LeadBinding(
+                user_number=user_number,
+                operator_number=operator_number,
+                lead_id=lead_id
+            )
+            session.add(binding)
+            await session.commit()

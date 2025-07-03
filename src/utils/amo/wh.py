@@ -1,6 +1,7 @@
-import httpx
 import urllib.parse
 from typing import Optional
+
+import httpx
 
 from waba_api.src.settings.conf import amosettings, log
 

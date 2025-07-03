@@ -3,8 +3,9 @@ import os
 import uvicorn
 from fastapi import FastAPI
 
-from src.api.meta_api import router as webhook_router
+from src.api.amo_meta import router as amo_meta_router
 from src.api.amoCRM_API import router as amocrm_router
+from src.api.meta_api import router as webhook_router
 
 app = FastAPI(
     title="WhatsApp Business Webhook",
@@ -13,7 +14,7 @@ app = FastAPI(
 )
 app.include_router(router=webhook_router)
 app.include_router(router=amocrm_router)
-
+app.include_router(router=amo_meta_router)
 
 @app.get("/")
 async def root():

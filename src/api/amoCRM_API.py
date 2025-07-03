@@ -1,29 +1,24 @@
-from fastapi import APIRouter, status, Body, Request, HTTPException
 from urllib.parse import parse_qs
 
-from waba_api.src.schemas.AmoSchemas import IncomingMessage
+from fastapi import APIRouter, HTTPException, Request, Response, status
+
 from waba_api.src.settings.conf import log
-from waba_api.src.utils.amo.wh import (
-    process_incoming_message,
-    send_outgoing_message,
-    get_user_id_by_lead_id,
-)
+from waba_api.src.utils.amo.wh import get_user_id_by_lead_id, send_outgoing_message
 
 router = APIRouter(prefix="/amo", tags=["amoCRM"])
 
 
 @router.post("/webhook/incoming-message", status_code=status.HTTP_200_OK)
-async def incoming_message_webhook(msg: IncomingMessage = Body(...)) -> dict:
+async def incoming_message_webhook(request: Request):
     """
-    Обрабатывает входящее сообщение (например, из WhatsApp).
-    Создаёт или обновляет контакт и сделку в amoCRM.
+    Обрабатывает входящее уведомление от amoCRM.
     """
     try:
-        await process_incoming_message(msg.external_user_id, msg.message)
-        return {"status": "received"}
+        form = await request.form()
+        log.info(f"[AMO→Meta] Webhook received (form): {dict(form)}")
     except Exception as e:
-        log.exception(f"Ошибка при обработке входящего сообщения: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        log.exception(f"[AMO→Meta] Error processing webhook {e}")
+    return Response(content="Webhook ignored", status_code=200)
 
 
 @router.post("/send-message", status_code=status.HTTP_200_OK)

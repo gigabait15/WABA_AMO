@@ -13,7 +13,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from src.database.models.base import Base
-from src.database.models.MessageModel import Messages
+from src.database.models.MetaModels import LeadBinding, Messages
 
 target_metadata = Base.metadata
 

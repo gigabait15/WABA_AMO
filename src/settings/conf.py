@@ -63,6 +63,21 @@ class AmoCRMSettings(BaseSettings):
     def get_headers(self) -> Dict[str, str]:
         return {"Authorization": f"Bearer {self.TOKEN}", "Content-Type": "application/json"}
 
+
+class AmoChatsSettings(BaseSettings):
+    AMO_CHATS_CHANNEL_ID: str
+    AMO_CHATS_SECRET: str
+    AMO_CHATS_ACCOUNT_ID: str
+    AMO_CHATS_SCOPE_ID: str
+    AMO_CHATS_SENDER_USER_AMOJO_ID: str
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] / ".env.chat",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
 dbsettings = DBSettings()
 metasettings = MetaSettings()
 amosettings = AmoCRMSettings()
+chatsettings = AmoChatsSettings()

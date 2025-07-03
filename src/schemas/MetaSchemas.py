@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, validator
 
+
 class TemplateSendRequest(BaseModel):
     to: str = Field(..., description="Телефон получателя в формате E.164")
     template_name: str = Field(..., description="Имя шаблона (name из Meta)")

@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import datetime
 import json
-import httpx
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, responses, status, BackgroundTasks
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, responses, status
 
 from waba_api.src.database.DAO.crud import MessagesDAO
 from waba_api.src.schemas.MetaSchemas import SendRequest, TemplateSendRequest
 from waba_api.src.settings.conf import log, metasettings
-from waba_api.src.tasks.amo import send_to_amo
+from waba_api.src.utils.amo.chat import AmoCRMClient
 from waba_api.src.utils.meta.utils_message import get_display_phone_number, send_message
-
 
 db = MessagesDAO()
 router = APIRouter(prefix='/meta', tags=['meta'])
@@ -53,7 +52,8 @@ async def verify(
 
 
 @router.post("/webhook", status_code=status.HTTP_200_OK)
-async def incoming(request: Request, background_tasks: BackgroundTasks) -> str:
+async def incoming(request: Request) -> str:
+
     """
     Обрабатывает входящие сообщения от Cloud API.
     * Парсим JSON-payload;
@@ -93,12 +93,15 @@ async def incoming(request: Request, background_tasks: BackgroundTasks) -> str:
                     date=dt_obj
                 )
 
-                background_tasks.add_task(
-                    send_to_amo,
-                    external_user_id=user_number,
-                    text=text,
-                    log=log
-                )
+                client = AmoCRMClient()
+
+                contact_id = client.create_or_get_contact(user_number)
+                if contact_id:
+                    client.create_lead(contact_id)
+
+                await client.ensure_chat_visible(phone=user_number, text=text, timestamp=int(date))
+
+
 
         # TODO Сообщение отправенное пользователю
         else:
