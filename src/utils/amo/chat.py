@@ -104,7 +104,7 @@ class AmoCRMClient:
             log.info(f"Headers: {json.dumps(headers, indent=2)}")
             log.info(f"Body: {json.dumps(body, indent=2)}")
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(url, headers=headers, data=request_body)
 
             log.info(f"📥 Response status: {resp.status_code}")
@@ -120,18 +120,18 @@ class AmoCRMClient:
 
     async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int):
         msg_id = hashlib.md5(f"{phone}{timestamp}".encode()).hexdigest()
-        path = f"/v2/origin/custom/{self.channel_id}/message"
+        path = f"/v2/origin/custom/{self.scope_id}"
         body = {
             "event_type": "new_message",
             "payload": {
                 "timestamp": timestamp,
                 "msgid": msg_id,
-                "conversation_id": phone,
+                "conversation_id": f"whatsapp:{phone}",
                 "sender": {
                     "id": phone,
                     "name": phone,
                     "profile": f"https://wa.me/{phone}",
-                    "avatar": None
+                    "avatar": 'avatar'
                 },
                 "message": {
                     "type": "text",
@@ -150,7 +150,7 @@ class AmoCRMClient:
                 "timestamp": timestamp,
                 "msec_timestamp": timestamp * 1000,
                 "msgid": msg_id,
-                "conversation_id": phone,
+                "conversation_id": f"whatsapp:{phone}",
                 "silent": False,
                 "sender": {
                     "ref_id": chatsettings.AMO_CHATS_SENDER_USER_AMOJO_ID
@@ -158,7 +158,7 @@ class AmoCRMClient:
                 "receiver": {
                     "id": phone,
                     "name": phone,
-                    "avatar": None
+                    "avatar": 'avatar'
                 },
                 "message": {
                     "type": "text",
@@ -176,18 +176,18 @@ class AmoCRMClient:
 
     async def send_message_to_chat(self, rel_id: str, phone: str, text: str, timestamp: int):
         msg_id = hashlib.md5(f"{phone}{timestamp}".encode()).hexdigest()
-        path = f"/v2/origin/custom/{self.channel_id}/message"
+        path = f"/v2/origin/custom/{self.scope_id}"
         body = {
             "event_type": "new_message",
             "payload": {
                 "timestamp": timestamp,
                 "msgid": msg_id,
-                "conversation_id": rel_id,
+                "conversation_id": f"whatsapp:{phone}", #rel_id,
                 "sender": {
                     "id": phone,
                     "name": phone,
                     "profile": f"https://wa.me/{phone}",
-                    "avatar": None
+                    "avatar": 'avatar'
                 },
                 "message": {
                     "type": "text",
@@ -199,6 +199,7 @@ class AmoCRMClient:
 
     async def ensure_chat_visible(self, phone: str, text: str, timestamp: int):
         status, _ = await self.send_message_as_client_initial(phone, text, timestamp)
-        if status == 404:
+        if status == 404 or 400:
             log.warning("Client message failed — fallback to manager only")
             await self.send_message_from_manager(phone, text, timestamp)
+            await self.send_message_to_chat(self.real_conversation_id, phone, text, timestamp)
