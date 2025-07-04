@@ -211,14 +211,11 @@ class AmoCRMClient:
                 "timestamp": int(timestamp),
                 "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
-                "conversation_id": f"whatsapp:{phone}",
+                "conversation_id": f"whatsapp_{phone}",
                 "silent": False,
                 "sender": {
                     "id": phone,
                     "name": "Client",
-                },
-                "receiver": {
-                    "ref_id": chatsettings.AMO_CHATS_SENDER_USER_AMOJO_ID,
                 },
                 "message": {
                     "type": "text",
@@ -241,15 +238,15 @@ class AmoCRMClient:
         #         await redis_client.set_chat_id(phone, operator_phone, chat_id)
 
         # self.real_conversation_id = chat_id
-        await self.send_message_from_manager({
-            "timestamp": timestamp,
-            "message_id": f"client_{phone}_{timestamp}",
-            "conversation_id": f"whatsapp:{phone}",
-            "user_id": phone,
-            "avatar_link": "https://via.placeholder.com/150",
-            "name": "Client",
-            "message_text": text
-        })
+        # await self.send_message_from_manager({
+        #     "timestamp": timestamp,
+        #     "message_id": f"client_{phone}_{timestamp}",
+        #     "conversation_id": f"whatsapp:{phone}",
+        #     "user_id": phone,
+        #     "avatar_link": "https://via.placeholder.com/150",
+        #     "name": "Client",
+        #     "message_text": text
+        # })
         await self.send_message_as_client_initial(phone, text, timestamp)
         
     async def connect_channel(self):
