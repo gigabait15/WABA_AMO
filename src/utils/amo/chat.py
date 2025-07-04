@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -224,6 +225,7 @@ class AmoCRMClient:
             }
         }
         await self._post_to_amocrm(path, payload)
+        
 
     async def ensure_chat_visible(self, phone: str, text: str, timestamp: int, operator_phone: str):
         # contact_id = self.create_or_get_contact(phone)
@@ -238,3 +240,14 @@ class AmoCRMClient:
 
         # self.real_conversation_id = chat_id
         await self.send_message_as_client_initial(phone, text, timestamp)
+        
+    async def connect_channel(self):
+        url = f'/v2/origin/custom/{chatsettings.AMO_CHATS_CHANNEL_ID}/connect'
+
+        resp = await self._post_to_amocrm(url, data={
+            "account_id": chatsettings.AMO_CHATS_ACCOUNT_ID,
+            "hook_api_version": "v2",
+            "title": "InDevelopment"
+        })
+
+asyncio.run(AmoCRMClient().connect_channel())
