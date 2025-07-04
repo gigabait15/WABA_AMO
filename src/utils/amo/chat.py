@@ -204,6 +204,7 @@ class AmoCRMClient:
 
     async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int):
         path = f"/v2/origin/custom/{self.scope_id}"
+        timestamp = int(datetime.now().timestamp())
         msg_id = f"client_{phone}_{timestamp}"
         payload = {
             "event_type": "new_message",
@@ -215,7 +216,7 @@ class AmoCRMClient:
                 "silent": False,
                 "sender": {
                     "id": phone,
-                    "name": "Client",
+                    "name": "Client1",
                 },
                 "message": {
                     "type": "text",
