@@ -248,7 +248,7 @@ class AmoCRMClient:
         #     "name": "Client",
         #     "message_text": text
         # })
-        await self.connect_channel()
+        # await self.connect_channel()
         await self.send_message_as_client_initial(phone, text, timestamp)
         
     async def connect_channel(self):
