@@ -169,7 +169,9 @@ class AmoCRMClient:
 
             # log.error(f"[AmoCRM] Chat message failed: {response.status_code} | {response.text}")
             # log.debug(f"Response Text:\n{response.text}")
+            requests.post(url, headers=headers, data=request_body)
             log.info(f"POST {path} -> {response.status_code}")
+            
 
             try:
                 resp = response.json()
