@@ -132,7 +132,7 @@ class AmoCRMClient:
         conversation_id = f"whatsapp:{user_phone}"
         body = {
             "conversation_id": conversation_id,
-            "source": {"external_id": operator_phone},
+            # "source": {"external_id": operator_phone},
             "user": {
                 "id": user_phone,
                 "name": user_phone,
