@@ -58,7 +58,7 @@ class RedisSettings(BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] /".env",
+        env_file=Path(__file__).resolve().parents[2] /".env.redis",
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
