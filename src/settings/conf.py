@@ -61,6 +61,9 @@ class RedisSettings(BaseSettings):
         env_file=Path(__file__).resolve().parents[2] /".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
+        validate_default=True,
+        env_ignore_empty=True,
     )
 
 
