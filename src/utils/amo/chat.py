@@ -236,7 +236,7 @@ class AmoCRMClient:
             "payload": {
                 "timestamp": 1751660040,
                 "msec_timestamp": 1751660040000,
-                "msgid": "77adb3b93de17f56965f770f381edd07",
+                "msgid": "77adb3b93de17f56965f770f381edd08",
                 "conversation_id": "u2i-tAQt~Apd8Z3Chh0EoR5CAA",
                 "silent": False,
                 "sender": {
