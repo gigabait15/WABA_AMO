@@ -226,15 +226,15 @@ class AmoCRMClient:
         await self._post_to_amocrm(path, payload)
 
     async def ensure_chat_visible(self, phone: str, text: str, timestamp: int, operator_phone: str):
-        contact_id = self.create_or_get_contact(phone)
-        if contact_id:
-            self.create_lead(contact_id)
+        # contact_id = self.create_or_get_contact(phone)
+        # if contact_id:
+        #     self.create_lead(contact_id)
 
-        chat_id = await redis_client.get_chat_id(phone, operator_phone)
-        if not chat_id:
-            chat_id = await self.create_chat(phone, operator_phone)
-            if chat_id:
-                await redis_client.set_chat_id(phone, operator_phone, chat_id)
+        # chat_id = await redis_client.get_chat_id(phone, operator_phone)
+        # if not chat_id:
+        #     chat_id = await self.create_chat(phone, operator_phone)
+        #     if chat_id:
+        #         await redis_client.set_chat_id(phone, operator_phone, chat_id)
 
-        self.real_conversation_id = chat_id
+        # self.real_conversation_id = chat_id
         await self.send_message_as_client_initial(phone, text, timestamp)
