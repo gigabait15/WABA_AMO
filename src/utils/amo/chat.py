@@ -210,9 +210,9 @@ class AmoCRMClient:
                 "timestamp": int(timestamp),
                 "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
-                "conversation_id": "4bc82eae-bc57-4177-b860-c9796f8fle58", # whatsapp:{phone}
+                "conversation_id": f"whatsapp:{phone}",
                 "sender": {
-                    "id": "66e8fcb3-0595-4074-b054-b95bf6dea2b2", # phone
+                    "id": phone,
                     "name": "Client",
                     "profile": {"phone": phone}
                 },
