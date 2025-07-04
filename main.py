@@ -1,24 +1,37 @@
 import os
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
 
-from src.api.amo_meta import router as amo_meta_router
 from src.api.amoCRM_API import router as amocrm_router
 from src.api.meta_api import router as webhook_router
+from waba_api.src.settings.conf import log
+from waba_api.src.utils.redis_conn import redis_client
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    log.info("🔌 Connecting to Redis...")
+    yield
+    # shutdown
+    log.info("🛑 Closing Redis connection...")
+    await redis_client.close()
 app = FastAPI(
     title="WhatsApp Business Webhook",
     version="1.0.0",
     description="Приём/отправка сообщений WhatsApp Business через Cloud API",
+    lifespan=lifespan
 )
-app.include_router(router=webhook_router)
-app.include_router(router=amocrm_router)
-app.include_router(router=amo_meta_router)
 
 @app.get("/")
 async def root():
     return {"message": "APP is working"}
+
+app.include_router(router=webhook_router)
+app.include_router(router=amocrm_router)
+
 
 if __name__ == "__main__":
     uvicorn.run(

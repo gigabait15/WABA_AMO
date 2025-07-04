@@ -94,14 +94,12 @@ async def incoming(request: Request) -> str:
                 )
 
                 client = AmoCRMClient()
-
-                contact_id = client.create_or_get_contact(user_number)
-                if contact_id:
-                    client.create_lead(contact_id)
-
-                await client.ensure_chat_visible(phone=user_number, text=text, timestamp=int(date))
-
-
+                await client.ensure_chat_visible(
+                    phone=user_number,
+                    text=text,
+                    timestamp=date,
+                    operator_phone=operator_number
+                )
 
         # TODO Сообщение отправенное пользователю
         else:

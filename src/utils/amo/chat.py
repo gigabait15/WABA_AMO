@@ -9,6 +9,7 @@ import httpx
 import requests
 
 from waba_api.src.settings.conf import amosettings, chatsettings, log
+from waba_api.src.utils.redis_conn import redis_client
 
 
 class AmoCRMClient:
@@ -47,18 +48,14 @@ class AmoCRMClient:
             url = f"{self.base_url}/api/v4/contacts"
             data = [{
                 "name": phone,
-                "custom_fields_values": [
-                    {
-                        "field_code": "PHONE",
-                        "values": [{"value": phone, "enum_code": "WORK"}]
-                    }
-                ]
+                "custom_fields_values": [{
+                    "field_code": "PHONE",
+                    "values": [{"value": phone, "enum_code": "WORK"}]
+                }]
             }]
             response = requests.post(url, headers=self._auth_headers(), json=data)
             response.raise_for_status()
-            contact_id = response.json()["_embedded"]["contacts"][0]["id"]
-            log.info(f"[AmoCRM] Created new contact: {contact_id}")
-            return contact_id
+            return response.json()["_embedded"]["contacts"][0]["id"]
         except Exception as e:
             log.error(f"[AmoCRM] Failed to create contact: {e}")
             return None
@@ -74,11 +71,27 @@ class AmoCRMClient:
             }]
             response = requests.post(url, headers=self._auth_headers(), json=data)
             response.raise_for_status()
-            lead_id = response.json()[0]["id"]
-            log.info(f"[AmoCRM] Created lead: {lead_id}")
-            return lead_id
+            return response.json()[0]["id"]
         except Exception as e:
             log.error(f"[AmoCRM] Failed to create lead: {e}")
+            return None
+
+    def get_contact_phone_by_lead(self, lead_id: int) -> Optional[str]:
+        try:
+            url = f"{self.base_url}/api/v4/leads/{lead_id}?with=contacts"
+            response = requests.get(url, headers=self._auth_headers())
+            response.raise_for_status()
+            contact_id = response.json()["_embedded"]["contacts"][0]["id"]
+            url = f"{self.base_url}/api/v4/contacts/{contact_id}"
+            response = requests.get(url, headers=self._auth_headers())
+            response.raise_for_status()
+            fields = response.json().get("custom_fields_values", [])
+            for f in fields:
+                if f.get("field_code") == "PHONE":
+                    return f["values"][0]["value"]
+            return None
+        except Exception as e:
+            log.error(f"[AmoCRM] Failed to fetch phone for lead {lead_id}: {e}")
             return None
 
     async def _post_to_amocrm(self, path: str, body: dict):
@@ -87,7 +100,7 @@ class AmoCRMClient:
             content_type = "application/json"
             date = format_datetime(datetime.utcnow())
             request_body = json.dumps(body)
-            checksum = hashlib.md5(request_body.encode("utf-8")).hexdigest()
+            checksum = hashlib.md5(request_body.encode()).hexdigest()
             str_to_sign = "\n".join([method, checksum, content_type, date, path])
             signature = hmac.new(self.secret.encode(), str_to_sign.encode(), hashlib.sha1).hexdigest()
 
@@ -99,107 +112,76 @@ class AmoCRMClient:
             }
 
             url = self.chat_base_url + path
-            log.info("📤 Sending request to amoCRM Chat API")
-            log.info(f"URL: {url}")
-            log.info(f"Headers: {json.dumps(headers, indent=2)}")
-            log.info(f"Body: {json.dumps(body, indent=2)}")
-
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, headers=headers, data=request_body)
+                response = await client.post(url, headers=headers, data=request_body)
 
-            log.info(f"📥 Response status: {resp.status_code}")
-            log.info(f"📥 Response body: {resp.text}")
+            log.info(f"📤 {path} → {response.status_code}")
+            log.debug(f"📦 {response.text}")
 
-            if resp.status_code != 200:
-                log.error(f"[AmoCRM] Chat message failed: {resp.status_code} | {resp.text}")
+            log.error(f"[AmoCRM] Chat message failed: {response.status_code} | {response.text}")
+            log.debug(f"➡️ Request JSON:\n{json.dumps(body, indent=2)}")
+            log.debug(f"⬅️ Response Text:\n{response.text}")
 
-            return resp.status_code, resp.text
+            return response.status_code, response.text
         except Exception as e:
-            log.exception(f"[AmoCRM] Exception during chat message: {e}")
-            return 500, None  # Fallback
+            log.exception(f"[AmoCRM] Exception during POST to {path}: {e}")
+            return 500, None
 
-    async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int):
-        msg_id = hashlib.md5(f"{phone}{timestamp}".encode()).hexdigest()
-        path = f"/v2/origin/custom/{self.scope_id}"
+    async def create_chat(self, user_phone: str, operator_phone: str) -> Optional[str]:
+        path = f"/v2/origin/custom/{self.scope_id}/chats"
+        conversation_id = f"whatsapp:{user_phone}"
         body = {
-            "event_type": "new_message",
-            "payload": {
-                "timestamp": timestamp,
-                "msgid": msg_id,
-                "conversation_id": f"whatsapp:{phone}",
-                "sender": {
-                    "id": phone,
-                    "name": phone,
-                    "profile": f"https://wa.me/{phone}",
-                    "avatar": 'avatar'
-                },
-                "message": {
-                    "type": "text",
-                    "text": text
-                }
-            }
-        }
-        return await self._post_to_amocrm(path, body)
-
-    async def send_message_from_manager(self, phone: str, text: str, timestamp: int):
-        msg_id = f"manager_{phone}_{timestamp}"
-        path = f"/v2/origin/custom/{self.scope_id}"
-        body = {
-            "event_type": "new_message",
-            "payload": {
-                "timestamp": timestamp,
-                "msec_timestamp": timestamp * 1000,
-                "msgid": msg_id,
-                "conversation_id": f"whatsapp:{phone}",
-                "silent": False,
-                "sender": {
-                    "ref_id": chatsettings.AMO_CHATS_SENDER_USER_AMOJO_ID
-                },
-                "receiver": {
-                    "id": phone,
-                    "name": phone,
-                    "avatar": 'avatar'
-                },
-                "message": {
-                    "type": "text",
-                    "text": text
-                }
+            "conversation_id": conversation_id,
+            "source": {"external_id": operator_phone},
+            "user": {
+                "id": user_phone,
+                "name": user_phone,
+                "avatar": "https://via.placeholder.com/150",
+                "profile": {"phone": user_phone}
             }
         }
         status, response_text = await self._post_to_amocrm(path, body)
         if status == 200:
             try:
-                response_data = json.loads(response_text)
-                self.real_conversation_id = response_data.get("new_message", {}).get("conversation_id")
+                return json.loads(response_text)["id"]
             except Exception:
-                log.warning("Could not extract conversation_id from response")
+                log.warning("Could not extract chat id")
+        return None
 
-    async def send_message_to_chat(self, rel_id: str, phone: str, text: str, timestamp: int):
-        msg_id = hashlib.md5(f"{phone}{timestamp}".encode()).hexdigest()
+    async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int):
         path = f"/v2/origin/custom/{self.scope_id}"
-        body = {
+        msg_id = f"client_{phone}_{timestamp}"
+        payload = {
             "event_type": "new_message",
             "payload": {
-                "timestamp": timestamp,
+                "timestamp": int(timestamp),
+                "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
-                "conversation_id": f"whatsapp:{phone}", #rel_id,
+                "conversation_id": f"whatsapp:{phone}",
                 "sender": {
                     "id": phone,
-                    "name": phone,
-                    "profile": f"https://wa.me/{phone}",
-                    "avatar": 'avatar'
+                    "name": "Client",
+                    "profile": {"phone": phone}
                 },
                 "message": {
                     "type": "text",
                     "text": text
-                }
+                },
+                "silent": False
             }
         }
-        await self._post_to_amocrm(path, body)
+        await self._post_to_amocrm(path, payload)
 
-    async def ensure_chat_visible(self, phone: str, text: str, timestamp: int):
-        status, _ = await self.send_message_as_client_initial(phone, text, timestamp)
-        if status == 404 or 400:
-            log.warning("Client message failed — fallback to manager only")
-            await self.send_message_from_manager(phone, text, timestamp)
-            await self.send_message_to_chat(self.real_conversation_id, phone, text, timestamp)
+    async def ensure_chat_visible(self, phone: str, text: str, timestamp: int, operator_phone: str):
+        contact_id = self.create_or_get_contact(phone)
+        if contact_id:
+            self.create_lead(contact_id)
+
+        chat_id = await redis_client.get_chat_id(phone, operator_phone)
+        if not chat_id:
+            chat_id = await self.create_chat(phone, operator_phone)
+            if chat_id:
+                await redis_client.set_chat_id(phone, operator_phone, chat_id)
+
+        self.real_conversation_id = chat_id
+        await self.send_message_as_client_initial(phone, text, timestamp)
