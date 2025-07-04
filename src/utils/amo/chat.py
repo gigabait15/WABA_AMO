@@ -217,6 +217,9 @@ class AmoCRMClient:
                     "id": phone,
                     "name": "Client",
                 },
+                "receiver": {
+                    "ref_id": chatsettings.AMO_CHATS_SENDER_USER_AMOJO_ID,
+                },
                 "message": {
                     "type": "text",
                     "text": text
