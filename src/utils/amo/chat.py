@@ -161,16 +161,15 @@ class AmoCRMClient:
             # log.debug(f"Response: {response.text}")
 
             # log.error(f"[AmoCRM] Chat message failed: {response.status_code} | {response.text}")
-            # log.debug(f"Request JSON:\n{json.dumps(body, indent=2)}")
             # log.debug(f"Response Text:\n{response.text}")
             log.info(f"POST {path} -> {response.status_code}")
             
             try:
                 resp = response.json()
-                log.debug(f"Response JSON: {resp}")
+                log.info(f"Response JSON: {resp}")
             except json.JSONDecodeError as e:
                 log.error(f"Failed to parse JSON response: {e}")
-                log.debug(f"Response Text: {response.text}")
+                log.info(f"Response Text: {response.text}")
                 resp = None
             except Exception as e:
                 log.error(f"Unexpected error parsing response: {e}")

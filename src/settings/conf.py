@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log = logging.getLogger("uvicorn.error")
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 load_dotenv()
 
