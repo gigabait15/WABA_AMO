@@ -212,6 +212,7 @@ class AmoCRMClient:
                 "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
                 "conversation_id": f"whatsapp:{phone}",
+                "silent": False,
                 "sender": {
                     "id": phone,
                     "name": "Client",
@@ -220,8 +221,7 @@ class AmoCRMClient:
                 "message": {
                     "type": "text",
                     "text": text
-                },
-                "silent": False
+                }
             }
         }
         await self._post_to_amocrm(path, payload)
@@ -239,7 +239,6 @@ class AmoCRMClient:
         #         await redis_client.set_chat_id(phone, operator_phone, chat_id)
 
         # self.real_conversation_id = chat_id
-        await self.connect_channel()
         await self.send_message_as_client_initial(phone, text, timestamp)
         
     async def connect_channel(self):
