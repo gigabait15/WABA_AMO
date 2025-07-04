@@ -21,7 +21,7 @@ class AmoCRMClient:
         self.channel_id = chatsettings.AMO_CHATS_CHANNEL_ID
         self.account_id = chatsettings.AMO_CHATS_ACCOUNT_ID
         self.scope_id = f"{self.channel_id}_{self.account_id}"
-        self.chat_base_url = "https://amojo.amocrm.ru"
+        self.chat_base_url = "https://amojo.amocrm.com"
         self.real_conversation_id = None
 
 
