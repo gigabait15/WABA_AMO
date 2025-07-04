@@ -212,7 +212,7 @@ class AmoCRMClient:
                 "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
                 "conversation_id": f"whatsapp:{phone}",
-                "silent": True,
+                "silent": False,
                 "sender": {
                     "id": phone,
                     "name": "Client",
@@ -238,6 +238,15 @@ class AmoCRMClient:
         #         await redis_client.set_chat_id(phone, operator_phone, chat_id)
 
         # self.real_conversation_id = chat_id
+        await self.send_message_from_manager({
+            "timestamp": timestamp,
+            "message_id": f"client_{phone}_{timestamp}",
+            "conversation_id": f"whatsapp:{phone}",
+            "user_id": phone,
+            "avatar_link": "https://via.placeholder.com/150",
+            "name": "Client",
+            "message_text": text
+        })
         await self.send_message_as_client_initial(phone, text, timestamp)
         
     async def connect_channel(self):
@@ -249,3 +258,29 @@ class AmoCRMClient:
             "title": "InDevelopment"
         })
 
+
+    async def send_message_from_manager(self, data):
+        url = f'/v2/origin/custom/{chatsettings.AMO_CHATS_SCOPE_ID}'
+        data = {
+            "event_type": "new_message",
+            "payload": {
+                "timestamp": data["timestamp"],
+                "msec_timestamp": data["timestamp"] * 1000,
+                "msgid": data['message_id'],
+                "conversation_id": data["conversation_id"],
+                "silent": False,
+                "sender": {
+                    "ref_id": chatsettings.AMO_CHATS_SENDER_USER_AMOJO_ID,
+                },
+                "receiver": {
+                    "id": str(data['user_id']),
+                    "avatar": data['avatar_link'],
+                    "name": data['name']
+                },
+                "message": {
+                    "type": "text",
+                    "text": data['message_text'],
+                }
+            }
+        }
+        r = await self._post_to_amocrm(url, data)
