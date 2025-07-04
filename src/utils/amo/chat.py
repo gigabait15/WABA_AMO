@@ -212,11 +212,10 @@ class AmoCRMClient:
                 "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
                 "conversation_id": f"whatsapp:{phone}",
-                "silent": False,
+                "silent": True,
                 "sender": {
                     "id": phone,
                     "name": "Client",
-                    "profile": {"phone": phone}
                 },
                 "message": {
                     "type": "text",
