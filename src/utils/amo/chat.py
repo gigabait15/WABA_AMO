@@ -239,6 +239,7 @@ class AmoCRMClient:
         #         await redis_client.set_chat_id(phone, operator_phone, chat_id)
 
         # self.real_conversation_id = chat_id
+        await self.connect_channel()
         await self.send_message_as_client_initial(phone, text, timestamp)
         
     async def connect_channel(self):
@@ -250,4 +251,3 @@ class AmoCRMClient:
             "title": "InDevelopment"
         })
 
-asyncio.run(AmoCRMClient().connect_channel())
