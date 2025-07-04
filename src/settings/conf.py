@@ -17,6 +17,7 @@ class DBSettings(BaseSettings):
     DB_PASSWORD: str
     DB_PORT: int
     DB_HOST: str
+    DB_URL: str
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] /".env",

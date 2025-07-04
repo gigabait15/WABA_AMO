@@ -3,9 +3,9 @@ from typing import Any, Optional, Type
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from waba_api.src.database.models.base import Base
-from waba_api.src.database.models.MetaModels import LeadBinding, Messages
-from waba_api.src.settings.engine import async_session_maker
+from src.database.models.base import Base
+from src.database.models.MetaModels import LeadBinding, Messages
+from src.settings.engine import async_session_maker
 
 
 class BaseDAO:

@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession,
                                     async_sessionmaker, create_async_engine)
 from sqlalchemy.orm import sessionmaker
 
-from waba_api.src.settings.conf import dbsettings
+from src.settings.conf import dbsettings
 
 
 class DBConnection:

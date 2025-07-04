@@ -8,8 +8,8 @@ from typing import Optional
 import httpx
 import requests
 
-from waba_api.src.settings.conf import amosettings, chatsettings, log
-from waba_api.src.utils.redis_conn import redis_client
+from src.settings.conf import amosettings, chatsettings, log
+from src.utils.redis_conn import redis_client
 
 
 class AmoCRMClient:

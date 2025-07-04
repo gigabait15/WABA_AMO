@@ -4,7 +4,7 @@ import subprocess
 from sqlalchemy import text
 from sqlalchemy.engine import create_engine
 
-from waba_api.src.settings.conf import dbsettings
+from src.settings.conf import dbsettings
 
 
 def create_database() -> logging:

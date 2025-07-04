@@ -1,6 +1,6 @@
 import requests
 
-from waba_api.src.settings.conf import metasettings
+from src.settings.conf import metasettings
 
 APP_ID = metasettings.APP_ID
 APP_SECRET = '...'

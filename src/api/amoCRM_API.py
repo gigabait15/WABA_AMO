@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from waba_api.src.settings.conf import log, metasettings
-from waba_api.src.utils.amo.chat import AmoCRMClient
-from waba_api.src.utils.meta.utils_message import send_message
+from src.settings.conf import log, metasettings
+from src.utils.amo.chat import AmoCRMClient
+from src.utils.meta.utils_message import send_message
 
 router = APIRouter(prefix="/amo", tags=["amoCRM"])
 

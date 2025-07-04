@@ -6,8 +6,8 @@ from fastapi import FastAPI
 
 from src.api.amoCRM_API import router as amocrm_router
 from src.api.meta_api import router as webhook_router
-from waba_api.src.settings.conf import log
-from waba_api.src.utils.redis_conn import redis_client
+from src.settings.conf import log
+from src.utils.redis_conn import redis_client
 
 
 @asynccontextmanager

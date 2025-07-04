@@ -5,13 +5,14 @@ import json
 from typing import Any, Dict
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, responses, status
+from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
+                     Response, responses, status)
 
-from waba_api.src.database.DAO.crud import MessagesDAO
-from waba_api.src.schemas.MetaSchemas import SendRequest, TemplateSendRequest
-from waba_api.src.settings.conf import log, metasettings
-from waba_api.src.utils.amo.chat import AmoCRMClient
-from waba_api.src.utils.meta.utils_message import get_display_phone_number, send_message
+from src.database.DAO.crud import MessagesDAO
+from src.schemas.MetaSchemas import SendRequest, TemplateSendRequest
+from src.settings.conf import log, metasettings
+from src.utils.amo.chat import AmoCRMClient
+from src.utils.meta.utils_message import get_display_phone_number, send_message
 
 db = MessagesDAO()
 router = APIRouter(prefix='/meta', tags=['meta'])
