@@ -45,6 +45,25 @@ class MetaSettings(BaseSettings):
         return {"Content-Type": "application/json", "Authorization": f"Bearer {self.TOKEN}"}
 
 
+class RedisSettings(BaseSettings):
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: str = ""
+    
+    @property
+    def redis_url(self) -> str:
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] /".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
+
 class AmoCRMSettings(BaseSettings):
     TOKEN: str
     BASE_URL: str
@@ -82,3 +101,4 @@ dbsettings = DBSettings()
 metasettings = MetaSettings()
 amosettings = AmoCRMSettings()
 chatsettings = AmoChatsSettings()
+redissettings = RedisSettings()

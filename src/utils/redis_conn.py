@@ -1,10 +1,13 @@
 from typing import Optional
 
 from redis.asyncio import Redis
+from src.settings.conf import redissettings
 
 
 class RedisClient:
-    def __init__(self, url: str = "redis://localhost"):
+    def __init__(self, url: str = None):
+        if url is None:
+            url = redissettings.redis_url
         self._redis = Redis.from_url(url, decode_responses=True)
 
     async def get_chat_id(self, user_phone: str, operator_phone: str) -> Optional[str]:
