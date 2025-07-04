@@ -161,6 +161,7 @@ class AmoCRMClient:
             }
 
             url = self.chat_base_url + path
+            requests.post(url, headers=headers, data=request_body)
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, headers=headers, data=request_body)
 
@@ -169,7 +170,7 @@ class AmoCRMClient:
 
             # log.error(f"[AmoCRM] Chat message failed: {response.status_code} | {response.text}")
             # log.debug(f"Response Text:\n{response.text}")
-            requests.post(url, headers=headers, data=request_body)
+            
             log.info(f"POST {path} -> {response.status_code}")
             
 
@@ -238,15 +239,15 @@ class AmoCRMClient:
             "payload": {
                 "timestamp": 1751660040,
                 "msec_timestamp": 1751660040000,
-                "msgid": "77adb3b93de17f56965f770f381edd08",
-                "conversation_id": "u2i-tAQt~Apd8Z3Chh0EoR5CAA",
+                "msgid": "77adb3b93de17f56965f770f381edd02",
+                "conversation_id": "u2i-tAQt~Apd8Z3Chh0EoR5CAS",
                 "silent": False,
                 "sender": {
                     "id": "211670074",
                     "name": "Денис Димитриев",
                     "avatar": "https://static.avito.ru/stub_avatars/%D0%94/7_256x256.png",
                 },
-                "message": {"type": "text", "text": "111"},
+                "message": {"type": "text", "text": "333"},
             },
         }
 
