@@ -24,6 +24,7 @@ class AmoCRMClient:
         self.chat_base_url = "https://amojo.amocrm.ru"
         self.real_conversation_id = None
 
+
     def _auth_headers(self) -> dict:
         return {
             "Authorization": f"Bearer {self.access_token}",
@@ -156,8 +157,8 @@ class AmoCRMClient:
             headers = {
                 "Date": date,
                 "Content-Type": content_type,
-                "Content-MD5": checksum,
-                "X-Signature": signature,
+                "Content-MD5": checksum.lower(),
+                "X-Signature": signature.lower(),
             }
 
             url = self.chat_base_url + path
@@ -250,6 +251,7 @@ class AmoCRMClient:
                 "message": {"type": "text", "text": "333"},
             },
         }
+        # {'account_id': '2ae744e5-d33b-497f-aa0b-4666112f2779', 'scope_id': 'be7cfdb2-3e31-4099-b54b-4956a0e45fbe_2ae744e5-d33b-497f-aa0b-4666112f2779', 'title': 'InDevelopment', 'hook_api_version': 'v2', 'is_time_window_disabled': False}
 
         await self._post_to_amocrm(path, payload)
 
