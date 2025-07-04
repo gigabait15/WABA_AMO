@@ -245,7 +245,7 @@ class AmoCRMClient:
     async def connect_channel(self):
         url = f'/v2/origin/custom/{chatsettings.AMO_CHATS_CHANNEL_ID}/connect'
 
-        resp = await self._post_to_amocrm(url, data={
+        resp = await self._post_to_amocrm(url, {
             "account_id": chatsettings.AMO_CHATS_ACCOUNT_ID,
             "hook_api_version": "v2",
             "title": "InDevelopment"
