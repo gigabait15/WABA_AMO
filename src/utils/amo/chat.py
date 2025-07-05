@@ -278,7 +278,7 @@ class AmoCRMClient:
         #     "name": "Client",
         #     "message_text": text
         # })
-        # await self.connect_channel()
+        await self.connect_channel()
         await self.send_message_as_client_initial(phone, text, timestamp)
 
     async def connect_channel(self):
@@ -292,6 +292,7 @@ class AmoCRMClient:
                 "title": "InDevelopment",
             },
         )
+        log.info(f"url: {url}, response: {resp}")
 
     async def send_message_from_manager(self, data):
         url = f"/v2/origin/custom/{chatsettings.AMO_CHATS_SCOPE_ID}"
