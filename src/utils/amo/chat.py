@@ -210,7 +210,6 @@ class AmoCRMClient:
         self, phone: str, text: str, timestamp: int
     ):
         path = f"/v2/origin/custom/{self.scope_id}"
-        timestamp = int(datetime.now().timestamp())
         msg_id = f"client_{phone}_{timestamp}"
         payload = {
             "event_type": "new_message",
@@ -244,15 +243,6 @@ class AmoCRMClient:
                 await redis_client.set_chat_id(phone, operator_phone, chat_id)
 
         self.real_conversation_id = chat_id
-        await self.send_message_from_manager({
-            "timestamp": timestamp,
-            "message_id": f"client_{phone}_{timestamp}",
-            "conversation_id": f"whatsapp:{phone}",
-            "user_id": phone,
-            "avatar_link": "https://via.placeholder.com/150",
-            "name": "Client",
-            "message_text": text
-        })
         await self.send_message_as_client_initial(phone, text, timestamp)
 
     async def connect_channel(self):
