@@ -21,7 +21,7 @@ class AmoCRMClient:
         self.channel_id = chatsettings.AMO_CHATS_CHANNEL_ID
         self.account_id = chatsettings.AMO_CHATS_ACCOUNT_ID
         self.scope_id = f"{self.channel_id}_{self.account_id}"
-        self.chat_base_url = "https://amojo.amocrm.com"
+        self.chat_base_url = "https://amojo.amocrm.ru"
         self.real_conversation_id = None
 
 
@@ -234,23 +234,23 @@ class AmoCRMClient:
             },
         }
 
-        path = '/v2/origin/custom/be7cfdb2-3e31-4099-b54b-4956a0e45fbe_2ae744e5-d33b-497f-aa0b-4666112f2779'
-        payload = {
-            "event_type": "new_message",
-            "payload": {
-                "timestamp": 1751660040,
-                "msec_timestamp": 1751660040000,
-                "msgid": "77adb3b93de173df465f770f381edd03",
-                "conversation_id": "u2i-tAQt~Apd8Z3Chh0EoR5CdS",
-                "silent": False,
-                "sender": {
-                    "id": "211670074",
-                    "name": "Денис Димитриев",
-                    "avatar": "https://static.avito.ru/stub_avatars/%D0%94/7_256x256.png",
-                },
-                "message": {"type": "text", "text": "333"},
-            },
-        }
+        # path = '/v2/origin/custom/be7cfdb2-3e31-4099-b54b-4956a0e45fbe_2ae744e5-d33b-497f-aa0b-4666112f2779'
+        # payload = {
+        #     "event_type": "new_message",
+        #     "payload": {
+        #         "timestamp": 1751660040,
+        #         "msec_timestamp": 1751660040000,
+        #         "msgid": "77adb3b93de173df465f770f381edd03",
+        #         "conversation_id": "u2i-tAQt~Apd8Z3Chh0EoR5CdS",
+        #         "silent": False,
+        #         "sender": {
+        #             "id": "211670074",
+        #             "name": "Денис Димитриев",
+        #             "avatar": "https://static.avito.ru/stub_avatars/%D0%94/7_256x256.png",
+        #         },
+        #         "message": {"type": "text", "text": "333"},
+        #     },
+        # }
         # {'account_id': '2ae744e5-d33b-497f-aa0b-4666112f2779', 'scope_id': 'be7cfdb2-3e31-4099-b54b-4956a0e45fbe_2ae744e5-d33b-497f-aa0b-4666112f2779', 'title': 'InDevelopment', 'hook_api_version': 'v2', 'is_time_window_disabled': False}
 
         await self._post_to_amocrm(path, payload)
