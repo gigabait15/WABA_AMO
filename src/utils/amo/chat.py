@@ -165,12 +165,6 @@ class AmoCRMClient:
             requests.post(url, headers=headers, data=request_body)
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, headers=headers, data=request_body)
-
-            # log.info(f"POST {path} -> {response.status_code}")
-            # log.debug(f"Response: {response.text}")
-
-            # log.error(f"[AmoCRM] Chat message failed: {response.status_code} | {response.text}")
-            # log.debug(f"Response Text:\n{response.text}")
             
             log.info(f"POST {path} -> {response.status_code}")
             
@@ -234,51 +228,31 @@ class AmoCRMClient:
             },
         }
 
-        # path = '/v2/origin/custom/be7cfdb2-3e31-4099-b54b-4956a0e45fbe_2ae744e5-d33b-497f-aa0b-4666112f2779'
-        # payload = {
-        #     "event_type": "new_message",
-        #     "payload": {
-        #         "timestamp": 1751660040,
-        #         "msec_timestamp": 1751660040000,
-        #         "msgid": "77adb3b93de173df465f770f381edd03",
-        #         "conversation_id": "u2i-tAQt~Apd8Z3Chh0EoR5CdS",
-        #         "silent": False,
-        #         "sender": {
-        #             "id": "211670074",
-        #             "name": "Денис Димитриев",
-        #             "avatar": "https://static.avito.ru/stub_avatars/%D0%94/7_256x256.png",
-        #         },
-        #         "message": {"type": "text", "text": "333"},
-        #     },
-        # }
-        # {'account_id': '2ae744e5-d33b-497f-aa0b-4666112f2779', 'scope_id': 'be7cfdb2-3e31-4099-b54b-4956a0e45fbe_2ae744e5-d33b-497f-aa0b-4666112f2779', 'title': 'InDevelopment', 'hook_api_version': 'v2', 'is_time_window_disabled': False}
-
         await self._post_to_amocrm(path, payload)
 
     async def ensure_chat_visible(
         self, phone: str, text: str, timestamp: int, operator_phone: str
     ):
-        # contact_id = self.create_or_get_contact(phone)
-        # if contact_id:
-        #     self.create_lead(contact_id)
+        contact_id = self.create_or_get_contact(phone)
+        if contact_id:
+            self.create_lead(contact_id)
 
-        # chat_id = await redis_client.get_chat_id(phone, operator_phone)
-        # if not chat_id:
-        #     chat_id = await self.create_chat(phone, operator_phone)
-        #     if chat_id:
-        #         await redis_client.set_chat_id(phone, operator_phone, chat_id)
+        chat_id = await redis_client.get_chat_id(phone, operator_phone)
+        if not chat_id:
+            chat_id = await self.create_chat(phone, operator_phone)
+            if chat_id:
+                await redis_client.set_chat_id(phone, operator_phone, chat_id)
 
-        # self.real_conversation_id = chat_id
-        # await self.send_message_from_manager({
-        #     "timestamp": timestamp,
-        #     "message_id": f"client_{phone}_{timestamp}",
-        #     "conversation_id": f"whatsapp:{phone}",
-        #     "user_id": phone,
-        #     "avatar_link": "https://via.placeholder.com/150",
-        #     "name": "Client",
-        #     "message_text": text
-        # })
-        await self.connect_channel()
+        self.real_conversation_id = chat_id
+        await self.send_message_from_manager({
+            "timestamp": timestamp,
+            "message_id": f"client_{phone}_{timestamp}",
+            "conversation_id": f"whatsapp:{phone}",
+            "user_id": phone,
+            "avatar_link": "https://via.placeholder.com/150",
+            "name": "Client",
+            "message_text": text
+        })
         await self.send_message_as_client_initial(phone, text, timestamp)
 
     async def connect_channel(self):
