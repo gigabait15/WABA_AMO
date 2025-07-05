@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -23,10 +24,11 @@ class AmoCRMClient:
         self.chat_base_url = "https://amojo.amocrm.ru"
         self.real_conversation_id = None
 
+
     def _auth_headers(self) -> dict:
         return {
             "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
     def _find_contact_by_phone(self, phone: str) -> Optional[int]:
@@ -34,8 +36,16 @@ class AmoCRMClient:
             url = f"{self.base_url}/api/v4/contacts?query={phone}"
             response = requests.get(url, headers=self._auth_headers())
             response.raise_for_status()
-            contacts = response.json()["_embedded"]["contacts"]
-            return contacts[0]["id"] if contacts else None
+
+            try:
+                data = response.json()
+                contacts = data.get("_embedded", {}).get("contacts", [])
+                return contacts[0]["id"] if contacts else None
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                log.error(f"[AmoCRM] Failed to parse contacts response: {e}")
+                log.debug(f"Response text: {response.text}")
+                return None
+
         except Exception as e:
             log.error(f"[AmoCRM] Contact search failed: {e}")
             return None
@@ -46,16 +56,29 @@ class AmoCRMClient:
             return contact_id
         try:
             url = f"{self.base_url}/api/v4/contacts"
-            data = [{
-                "name": phone,
-                "custom_fields_values": [{
-                    "field_code": "PHONE",
-                    "values": [{"value": phone, "enum_code": "WORK"}]
-                }]
-            }]
+            data = [
+                {
+                    "name": phone,
+                    "custom_fields_values": [
+                        {
+                            "field_code": "PHONE",
+                            "values": [{"value": phone, "enum_code": "WORK"}],
+                        }
+                    ],
+                }
+            ]
             response = requests.post(url, headers=self._auth_headers(), json=data)
             response.raise_for_status()
-            return response.json()["_embedded"]["contacts"][0]["id"]
+
+            try:
+                data = response.json()
+                contacts = data.get("_embedded", {}).get("contacts", [])
+                return contacts[0]["id"] if contacts else None
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                log.error(f"[AmoCRM] Failed to parse create contact response: {e}")
+                log.debug(f"Response text: {response.text}")
+                return None
+
         except Exception as e:
             log.error(f"[AmoCRM] Failed to create contact: {e}")
             return None
@@ -63,15 +86,23 @@ class AmoCRMClient:
     def create_lead(self, contact_id: int, source: str = "WhatsApp") -> Optional[int]:
         try:
             url = f"{self.base_url}/api/v4/leads/complex"
-            data = [{
-                "name": f"Заявка из {source}",
-                "_embedded": {
-                    "contacts": [{"id": contact_id}]
+            data = [
+                {
+                    "name": f"Заявка из {source}",
+                    "_embedded": {"contacts": [{"id": contact_id}]},
                 }
-            }]
+            ]
             response = requests.post(url, headers=self._auth_headers(), json=data)
             response.raise_for_status()
-            return response.json()[0]["id"]
+
+            try:
+                data = response.json()
+                return data[0]["id"] if data else None
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                log.error(f"[AmoCRM] Failed to parse create lead response: {e}")
+                log.debug(f"Response text: {response.text}")
+                return None
+
         except Exception as e:
             log.error(f"[AmoCRM] Failed to create lead: {e}")
             return None
@@ -81,15 +112,32 @@ class AmoCRMClient:
             url = f"{self.base_url}/api/v4/leads/{lead_id}?with=contacts"
             response = requests.get(url, headers=self._auth_headers())
             response.raise_for_status()
-            contact_id = response.json()["_embedded"]["contacts"][0]["id"]
-            url = f"{self.base_url}/api/v4/contacts/{contact_id}"
-            response = requests.get(url, headers=self._auth_headers())
-            response.raise_for_status()
-            fields = response.json().get("custom_fields_values", [])
-            for f in fields:
-                if f.get("field_code") == "PHONE":
-                    return f["values"][0]["value"]
-            return None
+
+            try:
+                data = response.json()
+                contacts = data.get("_embedded", {}).get("contacts", [])
+                if not contacts:
+                    return None
+
+                contact_id = contacts[0]["id"]
+                url = f"{self.base_url}/api/v4/contacts/{contact_id}"
+                response = requests.get(url, headers=self._auth_headers())
+                response.raise_for_status()
+
+                contact_data = response.json()
+                fields = contact_data.get("custom_fields_values", [])
+                for f in fields:
+                    if f.get("field_code") == "PHONE":
+                        values = f.get("values", [])
+                        if values:
+                            return values[0]["value"]
+                return None
+
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                log.error(f"[AmoCRM] Failed to parse contact phone response: {e}")
+                log.debug(f"Response text: {response.text}")
+                return None
+
         except Exception as e:
             log.error(f"[AmoCRM] Failed to fetch phone for lead {lead_id}: {e}")
             return None
@@ -102,25 +150,35 @@ class AmoCRMClient:
             request_body = json.dumps(body)
             checksum = hashlib.md5(request_body.encode()).hexdigest()
             str_to_sign = "\n".join([method, checksum, content_type, date, path])
-            signature = hmac.new(self.secret.encode(), str_to_sign.encode(), hashlib.sha1).hexdigest()
+            signature = hmac.new(
+                self.secret.encode(), str_to_sign.encode(), hashlib.sha1
+            ).hexdigest()
 
             headers = {
                 "Date": date,
                 "Content-Type": content_type,
-                "Content-MD5": checksum,
-                "X-Signature": signature,
+                "Content-MD5": checksum.lower(),
+                "X-Signature": signature.lower(),
             }
 
             url = self.chat_base_url + path
+            requests.post(url, headers=headers, data=request_body)
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, headers=headers, data=request_body)
+            
+            log.info(f"POST {path} -> {response.status_code}")
+            
 
-            log.info(f"📤 {path} → {response.status_code}")
-            log.debug(f"📦 {response.text}")
-
-            log.error(f"[AmoCRM] Chat message failed: {response.status_code} | {response.text}")
-            log.debug(f"➡️ Request JSON:\n{json.dumps(body, indent=2)}")
-            log.debug(f"⬅️ Response Text:\n{response.text}")
+            try:
+                resp = response.json()
+                log.info(f"Response JSON: {resp}")
+            except json.JSONDecodeError as e:
+                log.error(f"Failed to parse JSON response: {e}")
+                log.info(f"Response Text: {response.text}")
+                resp = None
+            except Exception as e:
+                log.error(f"Unexpected error parsing response: {e}")
+                resp = None
 
             return response.status_code, response.text
         except Exception as e:
@@ -132,13 +190,13 @@ class AmoCRMClient:
         conversation_id = f"whatsapp:{user_phone}"
         body = {
             "conversation_id": conversation_id,
-            "source": {"external_id": operator_phone},
+            # "source": {"external_id": operator_phone},
             "user": {
                 "id": user_phone,
                 "name": user_phone,
                 "avatar": "https://via.placeholder.com/150",
-                "profile": {"phone": user_phone}
-            }
+                "profile": {"phone": user_phone},
+            },
         }
         status, response_text = await self._post_to_amocrm(path, body)
         if status == 200:
@@ -148,7 +206,9 @@ class AmoCRMClient:
                 log.warning("Could not extract chat id")
         return None
 
-    async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int):
+    async def send_message_as_client_initial(
+        self, phone: str, text: str, timestamp: int
+    ):
         path = f"/v2/origin/custom/{self.scope_id}"
         msg_id = f"client_{phone}_{timestamp}"
         payload = {
@@ -157,22 +217,21 @@ class AmoCRMClient:
                 "timestamp": int(timestamp),
                 "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
-                "conversation_id": f"whatsapp:{phone}",
+                "conversation_id": f"{phone}",
+                "silent": False,
                 "sender": {
                     "id": phone,
-                    "name": "Client",
-                    "profile": {"phone": phone}
+                    "name": "Client1",
                 },
-                "message": {
-                    "type": "text",
-                    "text": text
-                },
-                "silent": False
-            }
+                "message": {"type": "text", "text": text},
+            },
         }
+
         await self._post_to_amocrm(path, payload)
 
-    async def ensure_chat_visible(self, phone: str, text: str, timestamp: int, operator_phone: str):
+    async def ensure_chat_visible(
+        self, phone: str, text: str, timestamp: int, operator_phone: str
+    ):
         contact_id = self.create_or_get_contact(phone)
         if contact_id:
             self.create_lead(contact_id)
@@ -185,3 +244,42 @@ class AmoCRMClient:
 
         self.real_conversation_id = chat_id
         await self.send_message_as_client_initial(phone, text, timestamp)
+
+    async def connect_channel(self):
+        url = f"/v2/origin/custom/{chatsettings.AMO_CHATS_CHANNEL_ID}/connect"
+
+        resp = await self._post_to_amocrm(
+            url,
+            {
+                "account_id": chatsettings.AMO_CHATS_ACCOUNT_ID,
+                "hook_api_version": "v2",
+                "title": "InDevelopment",
+            },
+        )
+        log.info(f"url: {url}, response: {resp}")
+
+    async def send_message_from_manager(self, data):
+        url = f"/v2/origin/custom/{chatsettings.AMO_CHATS_SCOPE_ID}"
+        data = {
+            "event_type": "new_message",
+            "payload": {
+                "timestamp": data["timestamp"],
+                "msec_timestamp": data["timestamp"] * 1000,
+                "msgid": data["message_id"],
+                "conversation_id": data["conversation_id"],
+                "silent": False,
+                "sender": {
+                    "ref_id": chatsettings.AMO_CHATS_SENDER_USER_AMOJO_ID,
+                },
+                "receiver": {
+                    "id": str(data["user_id"]),
+                    "avatar": data["avatar_link"],
+                    "name": data["name"],
+                },
+                "message": {
+                    "type": "text",
+                    "text": data["message_text"],
+                },
+            },
+        }
+        r = await self._post_to_amocrm(url, data)
