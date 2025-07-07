@@ -9,12 +9,13 @@ from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
                      Response, responses, status)
 
 from src.database.DAO.crud import MessagesDAO
-from src.schemas.MetaSchemas import SendRequest, TemplateSendRequest
+from src.schemas.MetaSchemas import SendRequest, TemplateSendRequest, PhoneNumber, SuccessPhoneNumber
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
-from src.utils.meta.utils_message import get_display_phone_number, send_message
+from src.utils.meta.utils_message import MetaClient
 
 db = MessagesDAO()
+service = MetaClient()
 router = APIRouter(prefix='/meta', tags=['meta'])
 
 
@@ -118,27 +119,14 @@ async def incoming(request: Request) -> str:
 async def send(send_req: SendRequest = Depends()) -> str:
     """
     Отправляет сообщение пользователю.
-    Args:
-        send_req: валидированная модель `SendRequest` (Pydantic).
-    Returns:
-        JSON-ответ, проброшенный от Cloud API.
-    Raises:
-        HTTPException 502: если Cloud API вернула ошибку или не ответила.
+    :param send_req: валидированная модель `SendRequest` (Pydantic).
+    :return: JSON-ответ, проброшенный от Cloud API.
     """
-    await send_message(
-        send_req.wa_id,
-        send_req.text,
-        BASE_URL=metasettings.BASE_URL,
-        PHONE_NUMBER=metasettings.PHONE_NUMBER_ID,
-        HEADERS=metasettings.get_headers(),
-        log=log,
-        HTTPException=HTTPException,
-        status=status
-    )
-
-    operator_number = await get_display_phone_number(metasettings.PHONE_NUMBER_ID, metasettings.TOKEN)
+    await MetaClient.send_message(wa_id=send_req.wa_id, text=send_req.text)
+    # TODO здесь можно из БД прокидывать
+    operator_number = await MetaClient.get_display_phone_number()
     dt = datetime.datetime.now()
-    log.info('%s: message from %s to %s text %s', dt, operator_number, send_req.wa_id, send_req.text)
+    log.info('[META] %s: message from %s to %s text %s', dt, operator_number, send_req.wa_id, send_req.text)
 
     await db.add(
         user_number=int(send_req.wa_id),
@@ -162,10 +150,8 @@ async def get_number() -> responses.JSONResponse:
     """
     Получает WABA ID по Business ID, а затем возвращает номера телефонов,
     связанные с этим WhatsApp Business Account.
-    Returns:
-        responses.JSONResponse: Список номеров в формате JSON или ошибка с кодом и сообщением.
+    :return: Список номеров в формате JSON или ошибка с кодом и сообщением.
     """
-
     try:
         waba_url = (
             f'{metasettings.BASE_URL}/v19.0/{metasettings.BUS_ID}/'
@@ -282,3 +268,30 @@ async def send_template_message(payload: TemplateSendRequest = Depends()) -> res
         log.exception("Неизвестная ошибка при отправке шаблона")
         raise HTTPException(status_code=500, detail=f"Внутренняя ошибка: {str(e)}")
 
+@router.post(
+    "/register_number",
+    status_code=status.HTTP_200_OK,
+    summary="Регистрация нового номера телефона",
+    description="Добавление нового телефона в бизнес аккаунт. ответ будет id нового номера"
+)
+async def register_number(phone_data: PhoneNumber = Depends()) -> responses.JSONResponse:
+    payload = {
+        "cc": phone_data.cc,
+        "phone_number": phone_data.phone_number,
+        "display_name": phone_data.display_name,
+        "verified_name": phone_data.verified_name
+    }
+    return service.register_number(payload)
+
+@router.post(
+    "/success_number",
+    status_code=status.HTTP_200_OK,
+    summary="Подтверждение номера телефона",
+    description="После регистрации на указанный номер придет смс, ее вместе с phone_id"
+                " нужно передать сюда для подтвержения номера"
+)
+async def success_number(phone_data: SuccessPhoneNumber = Depends()) -> responses.JSONResponse:
+    return service.confirm_phone_number(
+        phone_number_id=phone_data.phone_number_id,
+        confirm_code=phone_data.confirm_code
+    )

@@ -46,19 +46,19 @@ class MetaSettings(BaseSettings):
 
 
 class RedisSettings(BaseSettings):
-    REDIS_HOST: str = "redis"
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
-    REDIS_PASSWORD: str = ""
+    REDIS_HOST: str
+    REDIS_PORT: int
+    REDIS_DB: int
+    # REDIS_PASSWORD: str
     
     @property
     def redis_url(self) -> str:
-        if self.REDIS_PASSWORD:
-            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        # if self.REDIS_PASSWORD:
+        #     return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] /".env",
+        env_file=Path(__file__).resolve().parents[2] /".env.redis",
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",

@@ -9,11 +9,21 @@ class TemplateSendRequest(BaseModel):
 class SendRequest(BaseModel):
     """Структура тела запроса на /send."""
 
-    wa_id: str
-    text: str
+    wa_id: str = Field(..., description="Номер телефона получателя")
+    text: str = Field(..., description="Текст сообщения")
 
     @validator("wa_id")
     def wa_id_must_be_digits(cls, v: str) -> str:
         if not v.isdigit():
             raise ValueError("wa_id должен содержать только цифры")
         return v
+
+class PhoneNumber(BaseModel):
+    cc: str = Field(..., description="код страны без '+'")
+    phone_number: str = Field(..., description="номер телефона")
+    display_name: str = Field(..., description="Отображаемое имя WhatsApp Business")
+    verified_name: str = Field(..., description="Проверенное имя компании (из Meta Business)")
+
+class SuccessPhoneNumber(BaseModel):
+    phone_number_id: str = Field(..., description="получен при регистрации номера")
+    verification_code: str = Field(..., description="отправленный код на номер указанный при регистрации")
