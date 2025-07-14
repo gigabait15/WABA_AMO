@@ -166,6 +166,7 @@ class AmoCRMClient:
 
             url = self.chat_base_url + path
             async with httpx.AsyncClient(timeout=30.0) as client:
+                log.info(f"Request body:\n{request_body}")
                 response = await client.post(url, headers=headers, data=request_body)
 
             log.info(f"POST {path} -> {response.status_code}")
@@ -180,19 +181,20 @@ class AmoCRMClient:
 
     async def create_chat(self, user_phone: str, operator_phone: str) -> Optional[str]:
         """
-        Создаёт чат для клиента.
-
+        Создаёт чат для клиента и конкретного оператора.
         :param user_phone: Телефон клиента.
         :param operator_phone: Телефон оператора.
         :return: ID созданного чата или None.
         """
         path = f"/v2/origin/custom/{self.scope_id}/chats"
-        conversation_id = f"whatsapp:{user_phone}"
+        conversation_id = f"whatsapp:{user_phone}:{operator_phone}"
+        user_id = f"{user_phone}:{operator_phone}"
         body = {
             "conversation_id": conversation_id,
+            "title": f"Чат {user_phone} — оператор {operator_phone}",
             "user": {
-                "id": user_phone,
-                "name": user_phone,
+                "id": user_id,
+                "name": user_id,
                 "avatar": "https://via.placeholder.com/150",
                 "profile": {"phone": user_phone},
             },
@@ -200,38 +202,39 @@ class AmoCRMClient:
         status, response_text = await self._post_to_amocrm(path, body)
         if status == 200:
             try:
-                return json.loads(response_text)["id"]
+                log.info(f"[AMO] conversation ID: {conversation_id}")
+                return conversation_id
+
             except (json.JSONDecodeError, KeyError):
                 log.warning("Не удалось извлечь chat ID из ответа.")
         return None
 
-    async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int):
-        """
-        Отправляет первое сообщение от клиента в чат.
-
-        :param phone: Номер телефона клиента.
-        :param text: Текст сообщения.
-        :param timestamp: Временная метка в формате UNIX.
-        """
-        path = f"/v2/origin/custom/{self.scope_id}"
+    async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int,
+                                             conversation_id: Optional[str], operator_phone: str):
+        sender_id = f"{phone}:{operator_phone}"
+        log.info(f"[AMO] send message client :{conversation_id}")
         msg_id = f"client_{phone}_{timestamp}"
+        path = f"/v2/origin/custom/{self.scope_id}"
         payload = {
             "event_type": "new_message",
             "payload": {
-                "timestamp": timestamp,
-                "msec_timestamp": timestamp * 1000,
+                "timestamp": int(timestamp),
+                "msec_timestamp": int(timestamp) * 1000,
                 "msgid": msg_id,
-                "conversation_id": phone,
+                "conversation_id": conversation_id,
                 "silent": False,
                 "sender": {
-                    "id": phone,
-                    "name": f'whatsapp: {phone}',
+                    "id": sender_id,
+                    "name": f'{conversation_id}',
                     "profile": {"phone": phone},
                 },
-                "message": {"type": "text", "text": text},
+                "message": {
+                    "type": "text",
+                    "text": text
+                },
             },
         }
-        await self._post_to_amocrm(path, payload)
+        await self._post_to_amocrm(path, body=payload)
 
     async def connect_channel(self):
         """
@@ -247,18 +250,37 @@ class AmoCRMClient:
         log.info(f"Подключение канала: статус={status}, ответ={resp}")
 
     async def ensure_chat_visible(self, phone: str, text: str, timestamp: int, operator_phone: str):
-        """
-        Обеспечивает отображение чата в интерфейсе оператора.
+        try:
+            # 1. Найти или создать контакт
+            contact_id = self.create_or_get_contact(phone)
+            if not contact_id:
+                log.error(f"[AmoCRM] Не удалось создать контакт для {phone}")
+                return
 
-        :param phone: Телефон клиента.
-        :param text: Сообщение от клиента.
-        :param timestamp: Время сообщения.
-        :param operator_phone: Телефон оператора.
-        """
-        chat_id = await redis_client.get_chat_id(phone, operator_phone)
-        self.real_conversation_id = chat_id
-        await self.send_message_as_client_initial(phone, text, timestamp)
-        await self.connect_channel()
+            key = f"client_operator:{phone}"
+            stored_operator = await redis_client.get(key)
+            if isinstance(stored_operator, bytes):
+                stored_operator = stored_operator.decode()
+
+            if stored_operator != operator_phone:
+                log.info(f"[AmoCRM] Новый оператор для клиента {phone}. Был: {stored_operator}, стал: {operator_phone}")
+
+                chat_id = await self.create_chat(phone, operator_phone)
+                if chat_id:
+                    await redis_client.set_chat_id(phone, operator_phone, chat_id)
+                    await redis_client.set(key, operator_phone)
+                    self.real_conversation_id = chat_id
+            else:
+                log.info(f"[AmoCRM] Оператор не изменился, используем текущий чат")
+                chat_id = await redis_client.get_chat_id(phone, operator_phone)
+                self.real_conversation_id = chat_id
+
+            await self.send_message_as_client_initial(phone, text, timestamp, self.real_conversation_id, stored_operator)
+
+            await self.connect_channel()
+
+        except Exception as e:
+            log.exception(f"[AmoCRM] Ошибка в ensure_chat_visible: {str(e)}")
 
     async def send_message_from_manager(self, data: dict):
         """
@@ -271,7 +293,7 @@ class AmoCRMClient:
             "event_type": "new_message",
             "payload": {
                 "timestamp": data["timestamp"],
-                "msec_timestamp": data["timestamp"] * 1000,
+                "msec_timestamp": int(data["timestamp"]) * 1000,
                 "msgid": data["message_id"],
                 "conversation_id": data["conversation_id"],
                 "silent": False,

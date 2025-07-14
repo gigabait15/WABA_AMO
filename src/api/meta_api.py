@@ -9,7 +9,7 @@ from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
                      Response, responses, status)
 
 from src.database.DAO.crud import MessagesDAO
-from src.schemas.MetaSchemas import SendRequest, TemplateSendRequest, PhoneNumber, SuccessPhoneNumber
+from src.schemas.MetaSchemas import SendRequest, TemplateSendRequest, PhoneNumber, SuccessPhoneNumber, TestR
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
 from src.utils.meta.utils_message import MetaClient
@@ -115,6 +115,17 @@ async def incoming(request: Request) -> str:
     return "ok"
 
 
+@router.post('/test_meta')
+async def test_meta(test_mess: TestR = Depends()):
+    client = AmoCRMClient()
+    await client.ensure_chat_visible(
+        phone=test_mess.wa_id,
+        text=test_mess.text,
+        timestamp=int(datetime.datetime.now().timestamp()),
+        operator_phone=test_mess.oper_num
+    )
+    return 'ok'
+
 @router.post("/send", status_code=status.HTTP_200_OK)
 async def send(send_req: SendRequest = Depends()) -> str:
     """
@@ -122,9 +133,9 @@ async def send(send_req: SendRequest = Depends()) -> str:
     :param send_req: валидированная модель `SendRequest` (Pydantic).
     :return: JSON-ответ, проброшенный от Cloud API.
     """
-    await MetaClient.send_message(wa_id=send_req.wa_id, text=send_req.text)
+    await service.send_message(wa_id=send_req.wa_id, text=send_req.text)
     # TODO здесь можно из БД прокидывать
-    operator_number = await MetaClient.get_display_phone_number()
+    operator_number = await service.get_display_phone_number()
     dt = datetime.datetime.now()
     log.info('[META] %s: message from %s to %s text %s', dt, operator_number, send_req.wa_id, send_req.text)
 

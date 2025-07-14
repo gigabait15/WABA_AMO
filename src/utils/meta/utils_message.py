@@ -1,4 +1,3 @@
-import json
 from typing import Any, Dict, Optional
 
 import httpx
@@ -13,7 +12,7 @@ class MetaClient:
         self.base_url: str = metasettings.BASE_URL
         self.verify_token: str = metasettings.VERIFY_TOKEN
         self.token: str = metasettings.TOKEN
-        self.operator_number: Optional[str] = None
+        self.operator_number: Optional[str] = metasettings.PHONE_NUMBER_ID
         self.headers: Dict[str, str] = metasettings.get_headers()
         self.bus_id: str = metasettings.BUS_ID
         self.waba_id: str = metasettings.ACCOUNT_ID

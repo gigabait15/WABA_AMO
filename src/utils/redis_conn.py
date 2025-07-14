@@ -10,6 +10,13 @@ class RedisClient:
             url = redissettings.redis_url
         self._redis = Redis.from_url(url, decode_responses=True)
 
+    async def set(self, key: str, value: str):
+        await self._redis.set(key, value)
+
+    async def get(self, key: str) -> Optional[str]:
+        val = await self._redis.get(key)
+        return val
+
     async def get_chat_id(self, user_phone: str, operator_phone: str) -> Optional[str]:
         key = f"chat:{user_phone}:{operator_phone}"
         return await self._redis.get(key)

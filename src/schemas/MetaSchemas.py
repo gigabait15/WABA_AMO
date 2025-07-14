@@ -12,6 +12,11 @@ class SendRequest(BaseModel):
     wa_id: str = Field(..., description="Номер телефона получателя")
     text: str = Field(..., description="Текст сообщения")
 
+class TestR(BaseModel):
+    wa_id: str = Field(..., description="Номер телефона получателя")
+    text: str = Field(..., description="Текст сообщения")
+    oper_num:str = Field(..., description="Operator")
+
     @validator("wa_id")
     def wa_id_must_be_digits(cls, v: str) -> str:
         if not v.isdigit():
