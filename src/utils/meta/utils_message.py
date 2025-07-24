@@ -1,10 +1,10 @@
+import json
 from typing import Any, Dict, Optional
 
 import httpx
 
 from src.schemas.MetaSchemas import PhoneNumber
 from src.settings.conf import log, metasettings
-
 
 
 class MetaClient:
@@ -74,6 +74,51 @@ class MetaClient:
             "text": {"body": text},
         }
         return await self._response("POST", url, json=payload)
+
+    async def get_templates(self, **kwargs):
+        try:
+            url = f"{self.base_url}/v19.0/{self.waba_id}/message_templates?access_token={self.token}"
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url)
+
+            if response.status_code != 200:
+                log.error(f"Ошибка получения шаблонов: {response.text}")
+                raise kwargs['HTTPException'](
+                    status_code=response.status_code,
+                    detail="Ошибка Meta API"
+                )
+
+            response_obj = kwargs['responses'].JSONResponse(
+                status_code=200,
+                content=response.json()
+            )
+            templates_list = []
+
+            for item in json.loads(response_obj.body).get('data', []):
+                components = item.get('components', [])
+                header = next((c.get('text') for c in components if c['type'] == 'HEADER'), None)
+                body = next((c.get('text') for c in components if c['type'] == 'BODY'), None)
+                footer = next((c.get('text') for c in components if c['type'] == 'FOOTER'), None)
+
+                templates_list.append({
+                    'external_id': item['id'],
+                    'name': item['name'],
+                    'waba_category': item['category'],
+                    'waba_language': item['language'],
+                    'waba_header': header,
+                    'content': body,
+                    'waba_footer': footer
+                })
+
+            return templates_list
+
+        except httpx.RequestError as e:
+            log.error(f"Ошибка подключения: {str(e)}")
+            raise kwargs['HTTPException'](status_code=503, detail="Ошибка подключения к Meta API")
+        except Exception as e:
+            log.exception("Неизвестная ошибка при получении шаблонов")
+            raise kwargs['HTTPException'](status_code=500, detail=f"Внутренняя ошибка: {str(e)}")
 
     async def get_display_phone_number(self, phone_number_id: str) -> str:
         """

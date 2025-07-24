@@ -6,13 +6,46 @@ from email.utils import format_datetime
 from typing import Optional, Tuple
 
 import httpx
-import requests
 
 from src.settings.conf import amosettings, chatsettings, log
 from src.utils.redis_conn import redis_client
 
 
 class AmoCRMClient:
+    @staticmethod
+    async def _request(
+        path: str,
+        params: Optional[str] = None,
+        body: Optional[dict | list] = None,
+        method: str = "POST",
+        headers: Optional[dict] = None,
+    ) -> Tuple[int, Optional[httpx.Response]]:
+        """
+        Выполняет асинхронный HTTP-запрос с помощью httpx.
+        :param path: Полный URL запроса.
+        :param params: Тип параметров ('params', 'json', 'content').
+        :param body: Тело запроса.
+        :param method: Метод запроса (GET, POST и т.п.).
+        :param headers: Заголовки запроса.
+        :return: Кортеж (HTTP-статус, объект ответа или None).
+        """
+        request_arg = {
+            "url": path,
+            "headers": headers,
+            params: body,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await getattr(client, method.lower())(**request_arg)
+                response.raise_for_status()
+                return response.status_code, response
+        except httpx.HTTPStatusError as e:
+            log.error(f"[AmoCRM] HTTP error: {e.response.status_code}")
+            log.error(f"Ответ AmoCRM: {e.response.text}")
+        except json.JSONDecodeError as e:
+            log.error(f"[AmoCRM] Некорректный JSON: {e}")
+        return 500, None
+
     def __init__(self):
         """
         Инициализация клиента AmoCRM с основными настройками.
@@ -25,197 +58,189 @@ class AmoCRMClient:
         self.scope_id = f"{self.channel_id}_{self.account_id}"
         self.chat_base_url = "https://amojo.amocrm.ru"
         self.real_conversation_id: Optional[str] = None
-
-    def _auth_headers(self) -> dict:
-        """
-        Возвращает заголовки авторизации для API-запросов.
-        """
-        return {
+        self.headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
 
-    def _find_contact_by_phone(self, phone: str) -> Optional[int]:
+    async def _request_chat_base_url(
+        self,
+        path: str,
+        params: Optional[str] = None,
+        body: Optional[dict | list] = None,
+        method: str = "POST",
+    ) -> Tuple[int, Optional[str]]:
         """
-        Ищет контакт в AmoCRM по номеру телефона.
+        Делает авторизованный запрос в чат AmoCRM с HMAC-подписью.
+        """
+        content_type = "application/json"
+        date = format_datetime(datetime.utcnow())
 
-        :param phone: Номер телефона для поиска.
-        :return: ID найденного контакта или None.
+        request_body = json.dumps(body or {}, separators=(",", ":"))
+        checksum = hashlib.md5(request_body.encode()).hexdigest()
+        str_to_sign = "\n".join([method, checksum, content_type, date, path])
+        signature = hmac.new(
+            self.secret.encode(), str_to_sign.encode(), hashlib.sha1
+        ).hexdigest()
+
+        headers = {
+            "Date": date,
+            "Content-Type": content_type,
+            "Content-MD5": checksum.lower(),
+            "X-Signature": signature.lower(),
+        }
+        return await AmoCRMClient._request(
+            path=self.chat_base_url + path,
+            params=params,
+            body=body,
+            method=method,
+            headers=headers,
+        )
+
+    async def find_contact_by_phone(self, phone: str) -> Optional[int]:
         """
-        try:
-            url = f"{self.base_url}/api/v4/contacts?query={phone}"
-            response = requests.get(url, headers=self._auth_headers())
-            response.raise_for_status()
-            data = response.json()
-            contacts = data.get("_embedded", {}).get("contacts", [])
+        Поиск контакта по указанному номеру телефона
+        :param phone: номер телефона в строковом формате
+        :return: id контакта, если он существует или ничего
+        """
+        url = f"{self.base_url}/api/v4/contacts?query={phone}"
+        status, data = await AmoCRMClient._request(
+            path=url, method="GET", headers=self.headers
+        )
+        if status != 500:
+            contacts = data.json().get("_embedded", {}).get("contacts", [])
             return contacts[0]["id"] if contacts else None
-        except requests.RequestException as e:
-            log.error(f"[AmoCRM] Ошибка запроса при поиске контакта: {e}")
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            log.error(f"[AmoCRM] Ошибка парсинга ответа контакта: {e}")
-            log.debug(f"Ответ: {response.text}")
         return None
 
-    def create_or_get_contact(self, phone: str) -> Optional[int]:
+    async def create_or_get_contact(self, phone: str) -> Optional[int]:
         """
-        Получает или создаёт контакт по номеру телефона.
-
-        :param phone: Номер телефона.
-        :return: ID контакта или None.
+        Создание нового контакта по номеру телефона, если его нет
+        :param phone: номер телефона в строковом формате
+        :return: в случае успешного запроса возвращает id созданного контакта
         """
-        contact_id = self._find_contact_by_phone(phone)
+        contact_id = await self.find_contact_by_phone(phone)
         if contact_id:
             return contact_id
-        try:
-            url = f"{self.base_url}/api/v4/contacts"
-            data = [{
+
+        url = f"{self.base_url}/api/v4/contacts"
+        data = [
+            {
                 "name": phone,
-                "custom_fields_values": [{
-                    "field_code": "PHONE",
-                    "values": [{"value": phone, "enum_code": "WORK"}],
-                }]
-            }]
-            response = requests.post(url, headers=self._auth_headers(), json=data)
-            response.raise_for_status()
-            created = response.json()
-            return created.get("_embedded", {}).get("contacts", [{}])[0].get("id")
-        except requests.RequestException as e:
-            log.error(f"[AmoCRM] Ошибка создания контакта: {e}")
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            log.error(f"[AmoCRM] Ошибка парсинга при создании контакта: {e}")
-            log.debug(f"Ответ: {response.text}")
+                "custom_fields_values": [
+                    {
+                        "field_code": "PHONE",
+                        "values": [{"value": phone, "enum_code": "WORK"}],
+                    }
+                ],
+            }
+        ]
+        status, data = await AmoCRMClient._request(
+            path=url, params="json", body=data, headers=self.headers
+        )
+        if status != 500:
+            return data.json().get("_embedded", {}).get("contacts", [{}])[0].get("id")
         return None
 
-    def create_lead(self, contact_id: int, source: str = "WhatsApp") -> Optional[int]:
+    async def create_lead(
+        self, contact_id: int, source: str = "WhatsApp"
+    ) -> Optional[int]:
         """
-        Создаёт сделку (лид), связанную с контактом.
-
-        :param contact_id: ID контакта.
-        :param source: Источник заявки.
-        :return: ID сделки или None.
+        Создание нового лида
+        :param contact_id: id существующего контакта
+        :param source: откуда поступила заявка
+        :return: в случае успешного запроса возвращает id лида
         """
-        try:
-            url = f"{self.base_url}/api/v4/leads/complex"
-            data = [{
+        url = f"{self.base_url}/api/v4/leads/complex"
+        data = [
+            {
                 "name": f"Заявка из {source}",
-                "_embedded": {"contacts": [{"id": contact_id}]}
-            }]
-            response = requests.post(url, headers=self._auth_headers(), json=data)
-            response.raise_for_status()
-            return response.json()[0]["id"]
-        except requests.RequestException as e:
-            log.error(f"[AmoCRM] Ошибка создания сделки: {e}")
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            log.error(f"[AmoCRM] Ошибка парсинга ответа сделки: {e}")
-            log.debug(f"Ответ: {response.text}")
+                "_embedded": {"contacts": [{"id": contact_id}]},
+            }
+        ]
+        status, data = await AmoCRMClient._request(
+            path=url, params="json", body=data, headers=self.headers
+        )
+        if status != 500:
+            return data.json()[0]["id"]
         return None
 
-    def get_contact_phone_by_lead(self, lead_id: int) -> Optional[str]:
+    async def get_contact_phone_by_lead(self, lead_id: int) -> Optional[str]:
         """
-        Получает номер телефона контакта, связанного со сделкой.
+        Получение данных по лиду
+        :param lead_id: id существующего лида
+        :return: в случае успешного запроса возвращает даннные по лиду
+        """
+        lead_url = f"{self.base_url}/api/v4/leads/{lead_id}?with=contacts"
+        lead_status, lead_data = await AmoCRMClient._request(
+            path=lead_url, headers=self.headers, method="GET"
+        )
+        contacts = None
 
-        :param lead_id: ID сделки.
-        :return: Номер телефона или None.
-        """
-        try:
-            lead_url = f"{self.base_url}/api/v4/leads/{lead_id}?with=contacts"
-            lead_resp = requests.get(lead_url, headers=self._auth_headers())
-            lead_resp.raise_for_status()
-            contacts = lead_resp.json().get("_embedded", {}).get("contacts", [])
-            if not contacts:
-                return None
-            contact_id = contacts[0]["id"]
-            contact_url = f"{self.base_url}/api/v4/contacts/{contact_id}"
-            contact_resp = requests.get(contact_url, headers=self._auth_headers())
-            contact_resp.raise_for_status()
-            fields = contact_resp.json().get("custom_fields_values", [])
+        if lead_status != 500:
+            contacts = lead_data.json().get("_embedded", {}).get("contacts", [])
+
+        if not contacts:
+            return None
+
+        contact_id = contacts[0]["id"]
+        url = f"{self.base_url}/api/v4/contacts/{contact_id}"
+        status, data = await AmoCRMClient._request(
+            path=url, headers=self.headers, method="GET"
+        )
+        if status != 500:
+            fields = data.json().get("custom_fields_values", [])
             for f in fields:
                 if f.get("field_code") == "PHONE":
                     values = f.get("values", [])
                     if values:
                         return values[0].get("value")
-        except requests.RequestException as e:
-            log.error(f"[AmoCRM] Ошибка получения контакта по сделке {lead_id}: {e}")
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            log.error(f"[AmoCRM] Ошибка парсинга контакта по сделке: {e}")
         return None
-
-    async def _post_to_amocrm(self, path: str, body: dict) -> Tuple[int, Optional[str]]:
-        """
-        Асинхронная отправка POST-запроса в AmoCRM чат-интеграцию.
-
-        :param path: Путь запроса.
-        :param body: Тело запроса.
-        :return: Кортеж (HTTP статус, текст ответа).
-        """
-        try:
-            method = "POST"
-            content_type = "application/json"
-            date = format_datetime(datetime.utcnow())
-            request_body = json.dumps(body)
-            checksum = hashlib.md5(request_body.encode()).hexdigest()
-            str_to_sign = "\n".join([method, checksum, content_type, date, path])
-            signature = hmac.new(self.secret.encode(), str_to_sign.encode(), hashlib.sha1).hexdigest()
-
-            headers = {
-                "Date": date,
-                "Content-Type": content_type,
-                "Content-MD5": checksum.lower(),
-                "X-Signature": signature.lower(),
-            }
-
-            url = self.chat_base_url + path
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                log.info(f"Request body:\n{request_body}")
-                response = await client.post(url, headers=headers, data=request_body)
-
-            log.info(f"POST {path} -> {response.status_code}")
-            try:
-                log.info(f"Response JSON: {response.json()}")
-            except json.JSONDecodeError:
-                log.warning(f"Некорректный JSON-ответ: {response.text}")
-            return response.status_code, response.text
-        except Exception as e:
-            log.exception(f"[AmoCRM] Ошибка при POST {path}: {e}")
-            return 500, None
 
     async def create_chat(self, user_phone: str, operator_phone: str) -> Optional[str]:
         """
-        Создаёт чат для клиента и конкретного оператора.
-        :param user_phone: Телефон клиента.
-        :param operator_phone: Телефон оператора.
-        :return: ID созданного чата или None.
+        Создаёт чат между пользователем и оператором в AmoCRM.
+        :param user_phone: номер телефона контакта в строковом формате
+        :param operator_phone: номер телефона оператора в строковом формате
+        :return: в случае успешного запроса возвращает название чата
         """
-        path = f"/v2/origin/custom/{self.scope_id}/chats"
-        conversation_id = f"whatsapp:{user_phone}:{operator_phone}"
-        user_id = f"{user_phone}:{operator_phone}"
+        url = f"/v2/origin/custom/{self.scope_id}/chats"
         body = {
-            "conversation_id": conversation_id,
+            "conversation_id": f"whatsapp:{user_phone}:{operator_phone}",
             "title": f"Чат {user_phone} — оператор {operator_phone}",
             "user": {
-                "id": user_id,
-                "name": user_id,
+                "id": f"{user_phone}:{operator_phone}",
+                "name": f"{user_phone}:{operator_phone}",
                 "avatar": "https://via.placeholder.com/150",
                 "profile": {"phone": user_phone},
             },
         }
-        status, response_text = await self._post_to_amocrm(path, body)
-        if status == 200:
-            try:
-                log.info(f"[AMO] conversation ID: {conversation_id}")
-                return conversation_id
-
-            except (json.JSONDecodeError, KeyError):
-                log.warning("Не удалось извлечь chat ID из ответа.")
+        status, data = await self._request_chat_base_url(
+            path=url, params="content", body=body
+        )
+        if status != 500:
+            return f"whatsapp:{user_phone}:{operator_phone}"
         return None
 
-    async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int,
-                                             conversation_id: Optional[str], operator_phone: str):
+    async def send_message_as_client_initial(
+        self,
+        phone: str,
+        text: str,
+        timestamp: int,
+        conversation_id: Optional[str],
+        operator_phone: str,
+    ) -> None:
+        """
+        Отправляет сообщение от имени клиента.
+        :param phone: номер телефона контакта в строковом формате
+        :param text: сообщение от клиента
+        :param timestamp: время в секундах
+        :param conversation_id: внутренний id
+        :param operator_phone: номер телефона оператора в строковом формате
+        """
+        url = f"/v2/origin/custom/{self.scope_id}"
         sender_id = f"{phone}:{operator_phone}"
-        log.info(f"[AMO] send message client :{conversation_id}")
         msg_id = f"client_{phone}_{timestamp}"
-        path = f"/v2/origin/custom/{self.scope_id}"
-        payload = {
+        body = {
             "event_type": "new_message",
             "payload": {
                 "timestamp": int(timestamp),
@@ -225,34 +250,38 @@ class AmoCRMClient:
                 "silent": False,
                 "sender": {
                     "id": sender_id,
-                    "name": f'{conversation_id}',
+                    "name": f"{conversation_id}",
                     "profile": {"phone": phone},
                 },
-                "message": {
-                    "type": "text",
-                    "text": text
-                },
+                "message": {"type": "text", "text": text},
             },
         }
-        await self._post_to_amocrm(path, body=payload)
+        await self._request_chat_base_url(path=url, params="content", body=body)
 
-    async def connect_channel(self):
+    async def connect_channel(self) -> None:
         """
-        Подключает кастомный канал в AmoCRM.
+        Подключает кастомный канал AmoCRM.
         """
         url = f"/v2/origin/custom/{self.channel_id}/connect"
-        payload = {
+        body = {
             "account_id": self.account_id,
             "hook_api_version": "v2",
             "title": "InDevelopment",
         }
-        status, resp = await self._post_to_amocrm(url, payload)
-        log.info(f"Подключение канала: статус={status}, ответ={resp}")
+        await self._request_chat_base_url(path=url, params="content", body=body)
 
-    async def ensure_chat_visible(self, phone: str, text: str, timestamp: int, operator_phone: str):
+    async def ensure_chat_visible(
+        self, phone: str, text: str, timestamp: int, operator_phone: str
+    ) -> None:
+        """
+        Гарантирует, что чат с клиентом существует и видим оператору.
+        :param phone: номер телефона контакта в строковом формате
+        :param text: сообщение от клиента
+        :param timestamp: время в секундах
+        :param operator_phone: номер телефона оператора в строковом формате
+        """
         try:
-            # 1. Найти или создать контакт
-            contact_id = self.create_or_get_contact(phone)
+            contact_id = await self.create_or_get_contact(phone)
             if not contact_id:
                 log.error(f"[AmoCRM] Не удалось создать контакт для {phone}")
                 return
@@ -263,33 +292,30 @@ class AmoCRMClient:
                 stored_operator = stored_operator.decode()
 
             if stored_operator != operator_phone:
-                log.info(f"[AmoCRM] Новый оператор для клиента {phone}. Был: {stored_operator}, стал: {operator_phone}")
-
                 chat_id = await self.create_chat(phone, operator_phone)
                 if chat_id:
                     await redis_client.set_chat_id(phone, operator_phone, chat_id)
                     await redis_client.set(key, operator_phone)
                     self.real_conversation_id = chat_id
             else:
-                log.info(f"[AmoCRM] Оператор не изменился, используем текущий чат")
                 chat_id = await redis_client.get_chat_id(phone, operator_phone)
                 self.real_conversation_id = chat_id
 
-            await self.send_message_as_client_initial(phone, text, timestamp, self.real_conversation_id, stored_operator)
-
+            await self.send_message_as_client_initial(
+                phone, text, timestamp, self.real_conversation_id, operator_phone
+            )
             await self.connect_channel()
 
         except Exception as e:
             log.exception(f"[AmoCRM] Ошибка в ensure_chat_visible: {str(e)}")
 
-    async def send_message_from_manager(self, data: dict):
+    async def send_message_from_manager(self, data: dict) -> None:
         """
-        Отправляет сообщение от менеджера клиенту.
-
-        :param data: Словарь с данными сообщения.
+        Отправляет сообщение от имени менеджера в чат.
+        :param data: данные для запроса
         """
         url = f"/v2/origin/custom/{chatsettings.AMO_CHATS_SCOPE_ID}"
-        payload = {
+        body = {
             "event_type": "new_message",
             "payload": {
                 "timestamp": data["timestamp"],
@@ -309,4 +335,61 @@ class AmoCRMClient:
                 },
             },
         }
-        await self._post_to_amocrm(url, payload)
+        await self._request_chat_base_url(path=url, params="content", body=body)
+
+    async def get_templates(
+        self, page: int = 1, limit: int = 50
+    ) -> Optional[list[dict]]:
+        """
+        Получает список шаблонов чатов.
+        :param page: номер страницы
+        :param limit: количество шаблонов на странице
+        :return: в случае успешного запроса возвращает json шаблонов
+        """
+        url = f"{self.base_url}/api/v4/chats/templates"
+        body = {"page": page, "limit": limit}
+        status, data = await AmoCRMClient._request(
+            path=url, method="GET", params="params", body=body, headers=self.headers
+        )
+        if status == 204 or not data:
+            return []
+        if data:
+            return data.json().get("_embedded", {}).get("chat_templates", [])
+        return None
+
+    async def get_template_by_id(self, template_id: str) -> Optional[dict]:
+        """
+        Получает шаблон по его external_id.
+        :param template_id: внешний id  шаблона (присваивается от id waba template)
+        :return: в случае успешного запроса возвращает шаблон в формате словаря
+        """
+        url = f"{self.base_url}/api/v4/chats/templates"
+        body = {"filter[external_id]": template_id}
+        status, data = await AmoCRMClient._request(
+            path=url, method="GET", params="params", body=body, headers=self.headers
+        )
+        if status == 204 or not data:
+            return None
+        if data:
+            return data.json().get("_embedded", {}).get("chat_templates", [])
+        return None
+
+    async def add_template(self, template: dict) -> Optional[int]:
+        """
+        Добавляет шаблон в AmoCRM, если его ещё нет.
+        :param template: данные нового шаблона
+        :return: в случае успешного запроса возвращает id созданного шаблона из AMO
+        """
+        existing_template = await self.get_template_by_id(template.get("external_id"))
+        if existing_template:
+            return None
+
+        url = f"{self.base_url}/api/v4/chats/templates"
+        status, data = await AmoCRMClient._request(
+            path=url, params="json", body=[template], headers=self.headers
+        )
+        if status != 500:
+            create_template = data.json().get("_embedded", {}).get("chat_templates", [])
+            if create_template:
+                return create_template[0].get("id")
+        return None

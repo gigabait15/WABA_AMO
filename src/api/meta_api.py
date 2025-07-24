@@ -9,7 +9,9 @@ from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
                      Response, responses, status)
 
 from src.database.DAO.crud import MessagesDAO
-from src.schemas.MetaSchemas import SendRequest, TemplateSendRequest, PhoneNumber, SuccessPhoneNumber, TestR
+from src.schemas.MetaSchemas import (PhoneNumber, SendRequest,
+                                     SuccessPhoneNumber, TemplateSendRequest,
+                                     TestR)
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
 from src.utils.meta.utils_message import MetaClient
@@ -135,7 +137,8 @@ async def send(send_req: SendRequest = Depends()) -> str:
     """
     await service.send_message(wa_id=send_req.wa_id, text=send_req.text)
     # TODO здесь можно из БД прокидывать
-    operator_number = await service.get_display_phone_number()
+    # operator_number = await service.get_display_phone_number()
+    operator_number = '12'
     dt = datetime.datetime.now()
     log.info('[META] %s: message from %s to %s text %s', dt, operator_number, send_req.wa_id, send_req.text)
 
@@ -159,18 +162,18 @@ async def send(send_req: SendRequest = Depends()) -> str:
 )
 async def get_number() -> responses.JSONResponse:
     """
-    Получает WABA ID по Business ID, а затем возвращает номера телефонов,
+    Получает WABA ID по Business ID, а затем возвращает все номера телефонов,
     связанные с этим WhatsApp Business Account.
     :return: Список номеров в формате JSON или ошибка с кодом и сообщением.
     """
     try:
         waba_url = (
-            f'{metasettings.BASE_URL}/v19.0/{metasettings.BUS_ID}/'
+            f'{metasettings.BASE_URL}/v23.0/{metasettings.BUS_ID}/'
             f'owned_whatsapp_business_accounts?access_token={metasettings.TOKEN}'
         )
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            waba_response: httpx.Response = await client.get(waba_url)
+            waba_response = await client.get(waba_url)
 
         if waba_response.status_code != 200:
             log.error(f"Ошибка при получении WABA: {waba_response.text}")
@@ -183,25 +186,26 @@ async def get_number() -> responses.JSONResponse:
         if not waba_data:
             raise HTTPException(status_code=404, detail="WABA аккаунты не найдены")
 
-        waba_id = waba_data[0].get("id")
-        if not waba_id:
-            raise HTTPException(status_code=500, detail="Ошибка при получении ID WABA")
-
-        numbers_url = (
-            f"{metasettings.BASE_URL}/v19.0/{waba_id}/phone_numbers?access_token={metasettings.TOKEN}"
-        )
+        all_phone_numbers = []
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            num_response: httpx.Response = await client.get(numbers_url)
+            for waba in waba_data:
+                waba_id = waba.get("id")
+                if not waba_id:
+                    continue
 
-        if num_response.status_code != 200:
-            log.error(f"Ошибка при получении номеров: {num_response.text}")
-            raise HTTPException(
-                status_code=num_response.status_code,
-                detail="Не удалось получить номера телефонов"
-            )
+                numbers_url = (
+                    f"{metasettings.BASE_URL}/v19.0/{waba_id}/phone_numbers?access_token={metasettings.TOKEN}"
+                )
+                num_response = await client.get(numbers_url)
 
-        return responses.JSONResponse(status_code=200, content=num_response.json())
+                if num_response.status_code == 200:
+                    num_data = num_response.json().get("data", [])
+                    all_phone_numbers.extend(num_data)
+                else:
+                    log.warning(f"Не удалось получить номера для WABA ID {waba_id}: {num_response.text}")
+
+        return responses.JSONResponse(status_code=200, content={"data": all_phone_numbers})
 
     except httpx.RequestError as e:
         log.error(f"Ошибка подключения: {str(e)}")
@@ -219,25 +223,7 @@ async def get_number() -> responses.JSONResponse:
     description="Возвращает список одобренных шаблонов сообщений для текущего WhatsApp Business Account"
 )
 async def get_templates() -> responses.JSONResponse:
-    try:
-        waba_id = metasettings.ACCOUNT_ID
-        url = f"{metasettings.BASE_URL}/v19.0/{waba_id}/message_templates?access_token={metasettings.TOKEN}"
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url)
-
-        if response.status_code != 200:
-            log.error(f"Ошибка получения шаблонов: {response.text}")
-            raise HTTPException(status_code=response.status_code, detail="Ошибка Meta API")
-
-        return responses.JSONResponse(status_code=200, content=response.json())
-
-    except httpx.RequestError as e:
-        log.error(f"Ошибка подключения: {str(e)}")
-        raise HTTPException(status_code=503, detail="Ошибка подключения к Meta API")
-    except Exception as e:
-        log.exception("Неизвестная ошибка при получении шаблонов")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка: {str(e)}")
+    return await service.get_templates(responses=responses, HTTPException=HTTPException)
 
 
 @router.post(
@@ -264,7 +250,6 @@ async def send_template_message(payload: TemplateSendRequest = Depends()) -> res
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, headers=headers, json=data)
-            # TODO добвавить БД
 
         if response.status_code != 200:
             log.error(f"Ошибка при отправке шаблона: {response.text}")

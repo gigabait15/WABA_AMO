@@ -1,6 +1,7 @@
 from typing import Optional
 
 from redis.asyncio import Redis
+
 from src.settings.conf import redissettings
 
 

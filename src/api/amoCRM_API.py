@@ -1,28 +1,18 @@
-import hashlib
-import hmac
 import json
-import os
-from urllib.parse import unquote_plus, parse_qs
+from urllib.parse import parse_qs, unquote_plus
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
-from fastapi.responses import HTMLResponse
+from fastapi import (APIRouter, HTTPException, Request, Response, responses,
+                     status)
 
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
-
-from waba_api.src.settings.conf import chatsettings
 from src.utils.meta.utils_message import MetaClient
+from waba_api.src.schemas.AmoSchemas import TemplateSchemas
 
 router = APIRouter(prefix="/amo", tags=["amoCRM"])
 metaservice = MetaClient()
+amo = AmoCRMClient()
 
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HTML_FILE = os.path.join(BASE_DIR, "install.html")
-@router.get("/", response_class=HTMLResponse)
-async def get_amo():
-    with open(HTML_FILE, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
 
 @router.post("/webhook")
 async def receive_amocrm_webhook(request: Request):
@@ -43,10 +33,6 @@ async def receive_amocrm_webhook(request: Request):
 
     return {"status": "ok"}
 
-
-from fastapi import Request, Response, status
-from urllib.parse import parse_qs
-import json
 
 @router.post("/webhook/incoming-message", status_code=status.HTTP_200_OK)
 async def incoming_message_webhook(request: Request):
@@ -83,11 +69,8 @@ async def incoming_message_webhook(request: Request):
             else:
                 log.info(f"[Client→AMO] Клиент написал: {text}")
         else:
-            # Handle form-urlencoded — just log it for now or parse with parse_qs
             raw_body = await request.body()
             log.info("📭 AmoCRM Webhook (FORM): %s", raw_body.decode())
-            # parsed_form = parse_qs(raw_body.decode())
-            # log.debug(parsed_form)
 
     except Exception as e:
         log.exception(f"[AMO→Webhook] Ошибка обработки: {e}")
@@ -99,7 +82,6 @@ async def incoming_message_webhook(request: Request):
 
 @router.post("/webhook/send-message", status_code=200)
 async def send_message_from_amo(request: Request) -> dict:
-    from urllib.parse import parse_qs
 
     raw_body = await request.body()
     data = parse_qs(raw_body.decode("utf-8"))
@@ -113,7 +95,6 @@ async def send_message_from_amo(request: Request) -> dict:
 
     log.info('[AMoO] Send message amo %s', data)
 
-    amo = AmoCRMClient()
     user_phone = amo.get_contact_phone_by_lead(int(lead_id))
     if not user_phone:
         raise HTTPException(400, "Телефон контакта не найден")
@@ -121,3 +102,18 @@ async def send_message_from_amo(request: Request) -> dict:
 
     log.info(f"[AMO→WA] Сообщение отправлено клиенту {user_phone}: {text}")
     return {"status": "sent"}
+
+@router.get('/get_templates')
+async def get_templates():
+    return await amo.get_templates()
+
+@router.get('/get_template/{template_id}')
+async def get_template(template_id: str):
+    return await amo.get_template_by_id(template_id)
+
+
+@router.post('/add_template')
+async def add_template():
+    meta_templates = await metaservice.get_templates(responses=responses, HTTPException=HTTPException)
+    for temp in meta_templates:
+        await amo.add_template(TemplateSchemas(**temp).dict())
