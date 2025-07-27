@@ -5,21 +5,34 @@ import json
 from typing import Any, Dict
 
 import httpx
-from fastapi import (APIRouter, Depends, HTTPException, Query, Request,
-                     Response, responses, status)
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    responses,
+    status,
+)
 
-from src.database.DAO.crud import MessagesDAO
-from src.schemas.MetaSchemas import (PhoneNumber, SendRequest,
-                                     SuccessPhoneNumber, TemplateSendRequest,
-                                     TestR)
+from src.database.DAO.crud import MessagesDAO, DealsDAO
+from src.schemas.MetaSchemas import (
+    PhoneNumber,
+    SendRequest,
+    SuccessPhoneNumber,
+    TemplateSendRequest,
+    TestR,
+)
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
 from src.utils.meta.utils_message import MetaClient
 
 db = MessagesDAO()
 service = MetaClient()
-router = APIRouter(prefix='/meta', tags=['meta'])
-
+messagesDAO = MessagesDAO()
+dealsDAO = DealsDAO()
+router = APIRouter(prefix="/meta", tags=["meta"])
 
 
 @router.get(
@@ -57,7 +70,6 @@ async def verify(
 
 @router.post("/webhook", status_code=status.HTTP_200_OK)
 async def incoming(request: Request) -> str:
-
     """
     Обрабатывает входящие сообщения от Cloud API.
     * Парсим JSON-payload;
@@ -74,27 +86,25 @@ async def incoming(request: Request) -> str:
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Malformed JSON body")
 
-    if payload.get('object') == "whatsapp_business_account":
-        data = payload.get('entry')[0]
-        changes = data['changes'][0]
-        value = changes.get('value')
+    if payload.get("object") == "whatsapp_business_account":
+        data = payload.get("entry")[0]
+        changes = data["changes"][0]
+        value = changes.get("value")
 
         # TODO Сообщение от пользователя
-        if value.get('contacts') is not None:
-            user_number = value.get('messages')[0].get('from')
-            operator_number = value.get('metadata').get('display_phone_number')
-            date = value.get('messages')[0].get('timestamp')
+        if value.get("contacts") is not None:
+            user_number = value.get("messages")[0].get("from")
+            operator_number = value.get("metadata").get("display_phone_number")
+            date = value.get("messages")[0].get("timestamp")
             dt_obj = datetime.datetime.fromtimestamp(int(date))
-            if value.get('messages')[0].get('type') == "text":
-                text = value.get('messages')[0].get('text').get('body')
-                log.info('New message %s from %s to %s: %s ', dt_obj, user_number, operator_number, text)
-
-                await db.add(
-                    user_number=int(user_number),
-                    operator_number=int(operator_number),
-                    from_number=int(user_number),
-                    text=text,
-                    date=dt_obj
+            if value.get("messages")[0].get("type") == "text":
+                text = value.get("messages")[0].get("text").get("body")
+                log.info(
+                    "New message %s from %s to %s: %s ",
+                    dt_obj,
+                    user_number,
+                    operator_number,
+                    text,
                 )
 
                 client = AmoCRMClient()
@@ -102,31 +112,67 @@ async def incoming(request: Request) -> str:
                     phone=user_number,
                     text=text,
                     timestamp=date,
-                    operator_phone=operator_number
+                    operator_phone=operator_number,
+                )
+
+                deal_id = await dealsDAO.find_id(
+                    client_phone=user_number,
+                    operator_phone=operator_number,
+                )
+
+                await messagesDAO.add(
+                    id=value.get("messages")[0].get("id"),
+                    sender=user_number,
+                    text=text,
+                    timestamp=dt_obj,
+                    deals_id=deal_id.id,
                 )
 
         # TODO Сообщение отправенное пользователю
         else:
-            user_number = value.get('statuses')[0].get('recipient_id')
-            operator_number = value.get('metadata').get('display_phone_number')
-            date = value.get('statuses')[0].get('timestamp')
+            user_number = value.get("statuses")[0].get("recipient_id")
+            operator_number = value.get("metadata").get("display_phone_number")
+            date = value.get("statuses")[0].get("timestamp")
             dt_obj = datetime.datetime.fromtimestamp(int(date))
-            message_status = value.get('statuses')[0].get('status')
-            log.info('Meta message %s from %s to %s status %s ', dt_obj, operator_number, user_number, message_status)
+            message_status = value.get("statuses")[0].get("status")
+
+            log.info(f"[---------META] {value}")
+
+            deal_id = await dealsDAO.find_id(
+                client_phone=user_number,
+                operator_phone=operator_number,
+            )
+
+            await messagesDAO.upsert(
+                id=value.get("statuses")[0].get("id"),
+                sender=user_number,
+                timestamp=dt_obj,
+                deals_id=deal_id.id,
+                status=message_status,
+            )
+
+            log.info(
+                "Meta message %s from %s to %s status %s ",
+                dt_obj,
+                operator_number,
+                user_number,
+                message_status,
+            )
 
     return "ok"
 
 
-@router.post('/test_meta')
+@router.post("/test_meta")
 async def test_meta(test_mess: TestR = Depends()):
     client = AmoCRMClient()
     await client.ensure_chat_visible(
         phone=test_mess.wa_id,
         text=test_mess.text,
         timestamp=int(datetime.datetime.now().timestamp()),
-        operator_phone=test_mess.oper_num
+        operator_phone=test_mess.oper_num,
     )
-    return 'ok'
+    return "ok"
+
 
 @router.post("/send", status_code=status.HTTP_200_OK)
 async def send(send_req: SendRequest = Depends()) -> str:
@@ -137,20 +183,8 @@ async def send(send_req: SendRequest = Depends()) -> str:
     """
     await service.send_message(wa_id=send_req.wa_id, text=send_req.text)
     # TODO здесь можно из БД прокидывать
-    # operator_number = await service.get_display_phone_number()
-    operator_number = '12'
-    dt = datetime.datetime.now()
-    log.info('[META] %s: message from %s to %s text %s', dt, operator_number, send_req.wa_id, send_req.text)
 
-    await db.add(
-        user_number=int(send_req.wa_id),
-        operator_number=int(operator_number),
-        from_number=int(operator_number),
-        text=send_req.text,
-        date=dt
-    )
-
-    return 'ok'
+    return "ok"
 
 
 @router.get(
@@ -158,7 +192,7 @@ async def send(send_req: SendRequest = Depends()) -> str:
     response_model=Any,
     status_code=status.HTTP_200_OK,
     summary="Получить номера телефонов из WABA",
-    description="Получает список номеров телефонов, привязанных к WhatsApp Business Account через Graph API Meta"
+    description="Получает список номеров телефонов, привязанных к WhatsApp Business Account через Graph API Meta",
 )
 async def get_number() -> responses.JSONResponse:
     """
@@ -168,8 +202,8 @@ async def get_number() -> responses.JSONResponse:
     """
     try:
         waba_url = (
-            f'{metasettings.BASE_URL}/v23.0/{metasettings.BUS_ID}/'
-            f'owned_whatsapp_business_accounts?access_token={metasettings.TOKEN}'
+            f"{metasettings.BASE_URL}/v23.0/{metasettings.BUS_ID}/"
+            f"owned_whatsapp_business_accounts?access_token={metasettings.TOKEN}"
         )
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -179,7 +213,7 @@ async def get_number() -> responses.JSONResponse:
             log.error(f"Ошибка при получении WABA: {waba_response.text}")
             raise HTTPException(
                 status_code=waba_response.status_code,
-                detail="Не удалось получить WhatsApp Business Account"
+                detail="Не удалось получить WhatsApp Business Account",
             )
 
         waba_data = waba_response.json().get("data")
@@ -194,18 +228,20 @@ async def get_number() -> responses.JSONResponse:
                 if not waba_id:
                     continue
 
-                numbers_url = (
-                    f"{metasettings.BASE_URL}/v19.0/{waba_id}/phone_numbers?access_token={metasettings.TOKEN}"
-                )
+                numbers_url = f"{metasettings.BASE_URL}/v19.0/{waba_id}/phone_numbers?access_token={metasettings.TOKEN}"
                 num_response = await client.get(numbers_url)
 
                 if num_response.status_code == 200:
                     num_data = num_response.json().get("data", [])
                     all_phone_numbers.extend(num_data)
                 else:
-                    log.warning(f"Не удалось получить номера для WABA ID {waba_id}: {num_response.text}")
+                    log.warning(
+                        f"Не удалось получить номера для WABA ID {waba_id}: {num_response.text}"
+                    )
 
-        return responses.JSONResponse(status_code=200, content={"data": all_phone_numbers})
+        return responses.JSONResponse(
+            status_code=200, content={"data": all_phone_numbers}
+        )
 
     except httpx.RequestError as e:
         log.error(f"Ошибка подключения: {str(e)}")
@@ -213,81 +249,66 @@ async def get_number() -> responses.JSONResponse:
 
     except Exception as e:
         log.exception("Неизвестная ошибка")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Внутренняя ошибка сервера: {str(e)}"
+        )
+
 
 @router.get(
     "/templates",
     response_model=Any,
     status_code=status.HTTP_200_OK,
     summary="Получить шаблоны сообщений",
-    description="Возвращает список одобренных шаблонов сообщений для текущего WhatsApp Business Account"
+    description="Возвращает список одобренных шаблонов сообщений для текущего WhatsApp Business Account",
 )
 async def get_templates() -> responses.JSONResponse:
-    return await service.get_templates(responses=responses, HTTPException=HTTPException)
+    return await service.get_templates()
 
 
 @router.post(
     "/send_template",
     status_code=status.HTTP_200_OK,
     summary="Отправить шаблонное сообщение",
-    description="Отправляет предварительно одобренное шаблонное сообщение пользователю"
+    description="Отправляет предварительно одобренное шаблонное сообщение пользователю",
 )
-async def send_template_message(payload: TemplateSendRequest = Depends()) -> responses.JSONResponse:
-    try:
-        url = f"{metasettings.BASE_URL}/v19.0/{metasettings.PHONE_NUMBER_ID}/messages"
+async def send_template_message(
+    payload: TemplateSendRequest = Depends(),
+) -> responses.JSONResponse:
+    return await service.post_template(
+        wa_id=payload.to,
+        temp_name=payload.template_name,
+        language_code=payload.language_code,
+    )
 
-        headers = metasettings.get_headers()
-
-        data = {
-            "messaging_product": "whatsapp",
-            "to": payload.to,
-            "type": "template",
-            "template": {
-                "name": payload.template_name,
-                "language": {"code": payload.language_code}
-            }
-        }
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(url, headers=headers, json=data)
-
-        if response.status_code != 200:
-            log.error(f"Ошибка при отправке шаблона: {response.text}")
-            raise HTTPException(status_code=response.status_code, detail="Не удалось отправить сообщение")
-
-        return responses.JSONResponse(status_code=200, content=response.json())
-
-    except httpx.RequestError as e:
-        log.error(f"Ошибка подключения: {str(e)}")
-        raise HTTPException(status_code=503, detail="Ошибка подключения к Meta API")
-    except Exception as e:
-        log.exception("Неизвестная ошибка при отправке шаблона")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка: {str(e)}")
 
 @router.post(
     "/register_number",
     status_code=status.HTTP_200_OK,
     summary="Регистрация нового номера телефона",
-    description="Добавление нового телефона в бизнес аккаунт. ответ будет id нового номера"
+    description="Добавление нового телефона в бизнес аккаунт. ответ будет id нового номера",
 )
-async def register_number(phone_data: PhoneNumber = Depends()) -> responses.JSONResponse:
+async def register_number(
+    phone_data: PhoneNumber = Depends(),
+) -> responses.JSONResponse:
     payload = {
         "cc": phone_data.cc,
         "phone_number": phone_data.phone_number,
         "display_name": phone_data.display_name,
-        "verified_name": phone_data.verified_name
+        "verified_name": phone_data.verified_name,
     }
     return service.register_number(payload)
+
 
 @router.post(
     "/success_number",
     status_code=status.HTTP_200_OK,
     summary="Подтверждение номера телефона",
     description="После регистрации на указанный номер придет смс, ее вместе с phone_id"
-                " нужно передать сюда для подтвержения номера"
+    " нужно передать сюда для подтвержения номера",
 )
-async def success_number(phone_data: SuccessPhoneNumber = Depends()) -> responses.JSONResponse:
+async def success_number(
+    phone_data: SuccessPhoneNumber = Depends(),
+) -> responses.JSONResponse:
     return service.confirm_phone_number(
-        phone_number_id=phone_data.phone_number_id,
-        confirm_code=phone_data.confirm_code
+        phone_number_id=phone_data.phone_number_id, confirm_code=phone_data.confirm_code
     )

@@ -69,13 +69,17 @@ class AmoCRMClient:
             return contact_id
         try:
             url = f"{self.base_url}/api/v4/contacts"
-            data = [{
-                "name": phone,
-                "custom_fields_values": [{
-                    "field_code": "PHONE",
-                    "values": [{"value": phone, "enum_code": "WORK"}],
-                }]
-            }]
+            data = [
+                {
+                    "name": phone,
+                    "custom_fields_values": [
+                        {
+                            "field_code": "PHONE",
+                            "values": [{"value": phone, "enum_code": "WORK"}],
+                        }
+                    ],
+                }
+            ]
             response = requests.post(url, headers=self._auth_headers(), json=data)
             response.raise_for_status()
             created = response.json()
@@ -97,10 +101,12 @@ class AmoCRMClient:
         """
         try:
             url = f"{self.base_url}/api/v4/leads/complex"
-            data = [{
-                "name": f"Заявка из {source}",
-                "_embedded": {"contacts": [{"id": contact_id}]}
-            }]
+            data = [
+                {
+                    "name": f"Заявка из {source}",
+                    "_embedded": {"contacts": [{"id": contact_id}]},
+                }
+            ]
             response = requests.post(url, headers=self._auth_headers(), json=data)
             response.raise_for_status()
             return response.json()[0]["id"]
@@ -141,15 +147,21 @@ class AmoCRMClient:
             log.error(f"[AmoCRM] Ошибка парсинга контакта по сделке: {e}")
         return None
 
-    async def _post_to_amocrm(self, path: str, body: dict = None, method: str = "POST") -> Tuple[int, Optional[str]]:
+    async def _post_to_amocrm(
+        self, path: str, body: dict = None, method: str = "POST"
+    ) -> Tuple[int, Optional[str]]:
         try:
             content_type = "application/json"
             date = format_datetime(datetime.utcnow())
 
-            request_body = json.dumps(body or {}, separators=(',', ':'))  # <-- очень важно: без пробелов!
+            request_body = json.dumps(
+                body or {}, separators=(",", ":")
+            )  # <-- очень важно: без пробелов!
             checksum = hashlib.md5(request_body.encode()).hexdigest()
             str_to_sign = "\n".join([method, checksum, content_type, date, path])
-            signature = hmac.new(self.secret.encode(), str_to_sign.encode(), hashlib.sha1).hexdigest()
+            signature = hmac.new(
+                self.secret.encode(), str_to_sign.encode(), hashlib.sha1
+            ).hexdigest()
 
             headers = {
                 "Date": date,
@@ -163,7 +175,9 @@ class AmoCRMClient:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 log.info(f"Request body:\n{request_body}")
                 if method.upper() == "POST":
-                    response = await client.post(url, content=request_body, headers=headers)
+                    response = await client.post(
+                        url, content=request_body, headers=headers
+                    )
                 elif method.upper() == "GET":
                     response = await client.get(url, headers=headers, params=body)
             try:
@@ -207,8 +221,14 @@ class AmoCRMClient:
                 log.warning("Не удалось извлечь chat ID из ответа.")
         return None
 
-    async def send_message_as_client_initial(self, phone: str, text: str, timestamp: int,
-                                             conversation_id: Optional[str], operator_phone: str):
+    async def send_message_as_client_initial(
+        self,
+        phone: str,
+        text: str,
+        timestamp: int,
+        conversation_id: Optional[str],
+        operator_phone: str,
+    ):
         sender_id = f"{phone}:{operator_phone}"
         log.info(f"[AMO] send message client :{conversation_id}")
         msg_id = f"client_{phone}_{timestamp}"
@@ -223,13 +243,10 @@ class AmoCRMClient:
                 "silent": False,
                 "sender": {
                     "id": sender_id,
-                    "name": f'{conversation_id}',
+                    "name": f"{conversation_id}",
                     "profile": {"phone": phone},
                 },
-                "message": {
-                    "type": "text",
-                    "text": text
-                },
+                "message": {"type": "text", "text": text},
             },
         }
         await self._post_to_amocrm(path, body=payload)
@@ -247,7 +264,9 @@ class AmoCRMClient:
         status, resp = await self._post_to_amocrm(url, payload)
         log.info(f"Подключение канала: статус={status}, ответ={resp}")
 
-    async def ensure_chat_visible(self, phone: str, text: str, timestamp: int, operator_phone: str):
+    async def ensure_chat_visible(
+        self, phone: str, text: str, timestamp: int, operator_phone: str
+    ):
         try:
             # 1. Найти или создать контакт
             contact_id = self.create_or_get_contact(phone)
@@ -261,7 +280,9 @@ class AmoCRMClient:
                 stored_operator = stored_operator.decode()
 
             if stored_operator != operator_phone:
-                log.info(f"[AmoCRM] Новый оператор для клиента {phone}. Был: {stored_operator}, стал: {operator_phone}")
+                log.info(
+                    f"[AmoCRM] Новый оператор для клиента {phone}. Был: {stored_operator}, стал: {operator_phone}"
+                )
 
                 chat_id = await self.create_chat(phone, operator_phone)
                 if chat_id:
@@ -273,7 +294,9 @@ class AmoCRMClient:
                 chat_id = await redis_client.get_chat_id(phone, operator_phone)
                 self.real_conversation_id = chat_id
 
-            await self.send_message_as_client_initial(phone, text, timestamp, self.real_conversation_id, stored_operator)
+            await self.send_message_as_client_initial(
+                phone, text, timestamp, self.real_conversation_id, stored_operator
+            )
 
             await self.connect_channel()
 
@@ -315,7 +338,9 @@ class AmoCRMClient:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self._auth_headers(), params=params)
+                response = await client.get(
+                    url, headers=self._auth_headers(), params=params
+                )
                 if response.status_code == 204 or not response.text.strip():
                     log.info("AmoCRM вернул пустой ответ (204 или тело пустое)")
                     return []
@@ -336,7 +361,9 @@ class AmoCRMClient:
         params = {"filter[external_id]": template_id}
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self._auth_headers(), params=params)
+                response = await client.get(
+                    url, headers=self._auth_headers(), params=params
+                )
                 if response.status_code == 204 or not response.text.strip():
                     log.info("AmoCRM вернул пустой ответ (204 или тело пустое)")
                     return None
@@ -353,7 +380,7 @@ class AmoCRMClient:
         return None
 
     async def post_template(self, data: dict) -> Optional[int]:
-        existing_template = await self.get_template_by_id(data.get('external_id'))
+        existing_template = await self.get_template_by_id(data.get("external_id"))
 
         if existing_template is not None:
             log.info(f"Шаблон с external_id={data.get('external_id')} уже существует")
@@ -364,9 +391,7 @@ class AmoCRMClient:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    url,
-                    headers=self._auth_headers(),
-                    json=[data]
+                    url, headers=self._auth_headers(), json=[data]
                 )
                 response.raise_for_status()
                 result = response.json()

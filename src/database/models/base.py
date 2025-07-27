@@ -8,6 +8,7 @@ class Base(AsyncAttrs, DeclarativeBase):
     Наследуется от AsyncAttrs и DeclarativeBase, что позволяет использовать асинхронную работу с SQLAlchemy
     и декларативное определение моделей.
     """
+
     __abstract__ = True
 
     @declared_attr.directive

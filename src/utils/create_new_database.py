@@ -16,18 +16,23 @@ def create_database() -> logging:
     """
     # Проверяем, запущен ли PostgreSQL
     try:
-        subprocess.run(['pg_isready'], check=True)
+        subprocess.run(["pg_isready"], check=True)
     except subprocess.CalledProcessError:
         logging.error("PostgreSQL is not running")
         return
 
     # Создаем базу данных, если она не существует
-    engine = create_engine(f"postgresql://{dbsettings.DB_USER}:{dbsettings.DB_PASSWORD}"
-                           f"@{dbsettings.DB_HOST}:{dbsettings.DB_PORT}/postgres", isolation_level='AUTOCOMMIT')
+    engine = create_engine(
+        f"postgresql://{dbsettings.DB_USER}:{dbsettings.DB_PASSWORD}"
+        f"@{dbsettings.DB_HOST}:{dbsettings.DB_PORT}/postgres",
+        isolation_level="AUTOCOMMIT",
+    )
     db_name = dbsettings.DB_NAME
     with engine.connect() as connection:
         try:
-            result = connection.execute(text(f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"))
+            result = connection.execute(
+                text(f"SELECT 1 FROM pg_database WHERE datname='{db_name}'")
+            )
             exists = result.scalar() is not None
             if not exists:
                 connection.execute(text(f"CREATE DATABASE {db_name}"))
@@ -39,5 +44,6 @@ def create_database() -> logging:
         finally:
             connection.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     create_database()

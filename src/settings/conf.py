@@ -20,7 +20,7 @@ class DBSettings(BaseSettings):
     DB_URL: str
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] /".env",
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
@@ -36,13 +36,16 @@ class MetaSettings(BaseSettings):
     BUS_ID: str
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] /".env.meta",
+        env_file=Path(__file__).resolve().parents[2] / ".env.meta",
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
 
     def get_headers(self) -> Dict[str, str]:
-        return {"Content-Type": "application/json", "Authorization": f"Bearer {self.TOKEN}"}
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.TOKEN}",
+        }
 
 
 class RedisSettings(BaseSettings):
@@ -50,7 +53,7 @@ class RedisSettings(BaseSettings):
     REDIS_PORT: int
     REDIS_DB: int
     # REDIS_PASSWORD: str
-    
+
     @property
     def redis_url(self) -> str:
         # if self.REDIS_PASSWORD:
@@ -58,7 +61,7 @@ class RedisSettings(BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] /".env.redis",
+        env_file=Path(__file__).resolve().parents[2] / ".env.redis",
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
@@ -73,7 +76,7 @@ class AmoCRMSettings(BaseSettings):
     SUBDOMAIN: str
     CLIENT_SECRET: str
     CLIENT_ID: str
-    CLOSED_STATUSES:list[int] = [142, 143]
+    CLOSED_STATUSES: list[int] = [142, 143]
     DEFAULT_PIPELINE_ID: str
     DEFAULT_STATUS_ID: str
 
@@ -84,7 +87,10 @@ class AmoCRMSettings(BaseSettings):
     )
 
     def get_headers(self) -> Dict[str, str]:
-        return {"Authorization": f"Bearer {self.TOKEN}", "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {self.TOKEN}",
+            "Content-Type": "application/json",
+        }
 
 
 class AmoChatsSettings(BaseSettings):
@@ -99,6 +105,7 @@ class AmoChatsSettings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
+
 
 dbsettings = DBSettings()
 metasettings = MetaSettings()

@@ -4,11 +4,82 @@ import json
 from datetime import datetime
 from email.utils import format_datetime
 from typing import Optional, Tuple
+import uuid
 
 import httpx
 
 from src.settings.conf import amosettings, chatsettings, log
 from src.utils.redis_conn import redis_client
+from src.database.DAO.crud import DealsDAO, TemplatesDAO, MessagesDAO
+from src.utils.meta.utils_message import MetaClient
+
+deals = DealsDAO()
+templatesDAO = TemplatesDAO()
+metaservice = MetaClient()
+
+
+async def get_client_phone(phone_client: str):
+    if phone_client[0] == "7":
+        return "78" + phone_client[1:]
+    return phone_client
+
+
+async def send_message(temp_id: str | None, chat_id: str, text: str, phone_client: str):
+    log.info(f"[AMO→Client] Менеджер написал в чат {chat_id}: {text}")
+    phone_client = await get_client_phone(phone_client)
+    if temp_id is None:
+        await metaservice.send_message(phone_client, text)
+    else:
+        temp_data = await templatesDAO.find_item_by_id(int(temp_id))
+        await metaservice.post_template(
+            phone_client, temp_data.name, temp_data.language
+        )
+
+
+async def incoming_message(request):
+    content_type = request.headers.get("Content-Type", "")
+    signature = request.headers.get("X-Signature", "")
+
+    if content_type.startswith("application/json"):
+        raw_body = await request.body()
+        log.info("Received AmoCRM Webhook message (raw_body): %s", raw_body)
+        log.info("Received AmoCRM Webhook message (signature): %s", signature)
+        payload = json.loads(raw_body)
+
+    elif content_type.startswith("application/x-www-form-urlencoded"):
+        form = await request.form()
+        payload = {k: v for k, v in form.items()}
+        log.info("📭 AmoCRM Webhook (FORM): %s", payload)
+
+        return payload, {}, {}, {}, None, None, None, None, None
+
+    else:
+        log.warning(f"Unsupported Content-Type: {content_type}")
+        return {}, {}, {}, {}, None, None, None, None, None
+
+    # обработка JSON webhook
+    message_data = payload.get("message", {})
+    message = message_data.get("message", {})
+    sender = message_data.get("sender", {})
+    receiver = message_data.get("receiver", {})
+
+    chat_id = message_data.get("conversation", {}).get("client_id")
+    text = message.get("text")
+    msg_type = message.get("type")
+    timestamp = payload.get("time")
+    message_id = message.get("id")
+
+    return (
+        message_data,
+        message,
+        sender,
+        receiver,
+        chat_id,
+        text,
+        msg_type,
+        timestamp,
+        message_id,
+    )
 
 
 class AmoCRMClient:
@@ -16,7 +87,7 @@ class AmoCRMClient:
     async def _request(
         path: str,
         params: Optional[str] = None,
-        body: Optional[dict | list] = None,
+        body: Optional[dict | list | str] = None,
         method: str = "POST",
         headers: Optional[dict] = None,
     ) -> Tuple[int, Optional[httpx.Response]]:
@@ -32,10 +103,17 @@ class AmoCRMClient:
         request_arg = {
             "url": path,
             "headers": headers,
-            params: body,
         }
+
+        if params == "json":
+            request_arg["json"] = body
+        elif params == "content":
+            request_arg["content"] = body
+        elif params == "params":
+            request_arg["params"] = body
+
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=60) as client:
                 response = await getattr(client, method.lower())(**request_arg)
                 response.raise_for_status()
                 return response.status_code, response
@@ -92,7 +170,7 @@ class AmoCRMClient:
         return await AmoCRMClient._request(
             path=self.chat_base_url + path,
             params=params,
-            body=body,
+            body=request_body.encode("utf-8"),
             method=method,
             headers=headers,
         )
@@ -107,8 +185,13 @@ class AmoCRMClient:
         status, data = await AmoCRMClient._request(
             path=url, method="GET", headers=self.headers
         )
-        if status != 500:
+        if status != 500 and data and data.content:
             contacts = data.json().get("_embedded", {}).get("contacts", [])
+            log.debug(f"[AmoCRM] Поиск контакта по номеру: {phone}")
+            log.debug(
+                f"[AmoCRM] Ответ find_contact_by_phone: {data.text if data else 'нет ответа'}"
+            )
+
             return contacts[0]["id"] if contacts else None
         return None
 
@@ -218,7 +301,8 @@ class AmoCRMClient:
             path=url, params="content", body=body
         )
         if status != 500:
-            return f"whatsapp:{user_phone}:{operator_phone}"
+            # return f"whatsapp:{user_phone}:{operator_phone}"
+            return data.json().get("id")
         return None
 
     async def send_message_as_client_initial(
@@ -273,17 +357,26 @@ class AmoCRMClient:
     async def ensure_chat_visible(
         self, phone: str, text: str, timestamp: int, operator_phone: str
     ) -> None:
-        """
-        Гарантирует, что чат с клиентом существует и видим оператору.
-        :param phone: номер телефона контакта в строковом формате
-        :param text: сообщение от клиента
-        :param timestamp: время в секундах
-        :param operator_phone: номер телефона оператора в строковом формате
-        """
         try:
-            contact_id = await self.create_or_get_contact(phone)
-            if not contact_id:
-                log.error(f"[AmoCRM] Не удалось создать контакт для {phone}")
+            # contact_id = await self.create_or_get_contact(phone)
+            # if not contact_id:
+            #     log.error(f"[AmoCRM] Не удалось создать контакт для {phone}")
+            #     return
+
+            msg_id = f"client_{phone}_{timestamp}"
+            redis_msg_key = f"msg_sent:{msg_id}"
+
+            # Защита от повторной обработки одного и того же сообщения
+            if await redis_client.get(redis_msg_key):
+                log.warning(
+                    f"[AmoCRM] Повторное сообщение msg_id={msg_id}, обработка прервана."
+                )
+                return
+            await redis_client.set(redis_msg_key, "1", ex=300)
+
+            chat_id = await self.create_chat(phone, operator_phone)
+            if not chat_id:
+                log.error("[AmoCRM] Не удалось создать чат, пропускаем сделку.")
                 return
 
             key = f"client_operator:{phone}"
@@ -292,18 +385,41 @@ class AmoCRMClient:
                 stored_operator = stored_operator.decode()
 
             if stored_operator != operator_phone:
-                chat_id = await self.create_chat(phone, operator_phone)
+                await redis_client.set_chat_id(phone, operator_phone, chat_id)
+                await redis_client.set(key, operator_phone)
+                self.real_conversation_id = chat_id
+            else:
+                chat_id = await redis_client.get_chat_id(phone, operator_phone)
                 if chat_id:
+                    self.real_conversation_id = chat_id
+                else:
+                    log.warning("[AmoCRM] chat_id не найден в Redis, создаём заново")
+                    chat_id = await self.create_chat(phone, operator_phone)
+                    if not chat_id:
+                        log.error("[AmoCRM] Повторное создание чата не удалось")
+                        return
                     await redis_client.set_chat_id(phone, operator_phone, chat_id)
                     await redis_client.set(key, operator_phone)
                     self.real_conversation_id = chat_id
-            else:
-                chat_id = await redis_client.get_chat_id(phone, operator_phone)
-                self.real_conversation_id = chat_id
+
+            if not self.real_conversation_id:
+                log.error(
+                    "[AmoCRM] conversation_id отсутствует перед отправкой сообщения"
+                )
+                return
 
             await self.send_message_as_client_initial(
                 phone, text, timestamp, self.real_conversation_id, operator_phone
             )
+
+            await deals.add(
+                id=uuid.uuid4(),
+                conversation_id=self.real_conversation_id,
+                client_phone=phone,
+                operator_phone=operator_phone,
+                created_at=datetime.fromtimestamp(int(timestamp)),
+            )
+
             await self.connect_channel()
 
         except Exception as e:
@@ -380,6 +496,12 @@ class AmoCRMClient:
         :param template: данные нового шаблона
         :return: в случае успешного запроса возвращает id созданного шаблона из AMO
         """
+        await templatesDAO.add(
+            id=int(template.get("external_id")),
+            name=template.get("name"),
+            language=template.get("waba_language"),
+        )
+
         existing_template = await self.get_template_by_id(template.get("external_id"))
         if existing_template:
             return None
