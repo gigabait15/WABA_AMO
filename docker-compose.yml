@@ -6,9 +6,15 @@ services:
       - .:/code
     env_file:
       - .env
+      - .env.redis
+      - .env.rmq
+      - .env.chat
+      - .env.amo
+      - .env.meta
     depends_on:
       - db
       - redis
+      - rabbitmq
     ports:
       - "8000:8000"
 
@@ -25,6 +31,8 @@ services:
   db:
     image: postgres:15
     restart: always
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -38,6 +46,28 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    env_file:
+      - .env.redis
+
+  rabbitmq:
+    image: rabbitmq:3.10.6-management-alpine
+    env_file:
+      - .env.rmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    restart: always
+    volumes:
+      - ./data/rabbit_data:/var/lib/rabbitmq/mnesia
+    ports:
+      - 5672:5672
+      - 15672:15672
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "status" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 
 volumes:
   postgres_data:
