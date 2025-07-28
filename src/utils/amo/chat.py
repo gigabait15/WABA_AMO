@@ -1,17 +1,17 @@
 import hashlib
 import hmac
 import json
+import uuid
 from datetime import datetime
 from email.utils import format_datetime
 from typing import Optional, Tuple
-import uuid
 
 import httpx
 
+from src.database.DAO.crud import DealsDAO, MessagesDAO, TemplatesDAO
 from src.settings.conf import amosettings, chatsettings, log
-from src.utils.redis_conn import redis_client
-from src.database.DAO.crud import DealsDAO, TemplatesDAO, MessagesDAO
 from src.utils.meta.utils_message import MetaClient
+from src.utils.redis_conn import redis_client
 
 deals = DealsDAO()
 templatesDAO = TemplatesDAO()

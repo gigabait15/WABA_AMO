@@ -107,8 +107,22 @@ class AmoChatsSettings(BaseSettings):
     )
 
 
+class RabbitMQSettings(BaseSettings):
+    RABBITMQ_HOST: str
+    RABBITMQ_USER: str
+    RABBITMQ_PASSWORD: str
+    RABBITMQ_PORT: int
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] / ".env.rmq",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
+
 dbsettings = DBSettings()
 metasettings = MetaSettings()
 amosettings = AmoCRMSettings()
 chatsettings = AmoChatsSettings()
 redissettings = RedisSettings()
+rmqsetting = RabbitMQSettings()

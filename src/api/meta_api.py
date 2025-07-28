@@ -16,7 +16,7 @@ from fastapi import (
     status,
 )
 
-from src.database.DAO.crud import MessagesDAO, DealsDAO
+from src.database.DAO.crud import DealsDAO, MessagesDAO
 from src.schemas.MetaSchemas import (
     PhoneNumber,
     SendRequest,
@@ -27,6 +27,7 @@ from src.schemas.MetaSchemas import (
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
 from src.utils.meta.utils_message import MetaClient
+from src.utils.rmq.RabbitModel import rmq
 
 db = MessagesDAO()
 service = MetaClient()
@@ -90,6 +91,8 @@ async def incoming(request: Request) -> str:
         data = payload.get("entry")[0]
         changes = data["changes"][0]
         value = changes.get("value")
+
+        await rmq.send_message("webhook_messages", f"meta:{value}")
 
         # TODO Сообщение от пользователя
         if value.get("contacts") is not None:

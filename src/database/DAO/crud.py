@@ -1,10 +1,16 @@
 from typing import Any, Optional, Type
 
-from sqlalchemy import desc, select, asc
+from sqlalchemy import asc, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.base import Base
-from src.database.models.Models import Messages, Deals, Templates, OperatorsData
+from src.database.models.Models import (
+    Deals,
+    MessageRecord,
+    Messages,
+    OperatorsData,
+    Templates,
+)
 from src.settings.engine import async_session_maker
 
 
@@ -130,3 +136,18 @@ class TemplatesDAO(BaseDAO):
 
 class OperatorsDAO(BaseDAO):
     model = OperatorsData
+
+
+class MessageRecordDAO(BaseDAO):
+    model = MessageRecord
+
+    @classmethod
+    async def search(cls):
+        async with cls.get_session() as session:
+            result = await session.execute(
+                cls.model.__table__.select().order_by(cls.model.id.desc())
+            )
+            messages = result.fetchall()
+            return [
+                {"id": m.id, "source": m.source, "content": m.content} for m in messages
+            ]

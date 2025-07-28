@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -6,18 +7,26 @@ from fastapi import FastAPI
 
 from src.api.amoCRM_API import router as amocrm_router
 from src.api.meta_api import router as webhook_router
+from src.api.rmq_api import router as rmq_router
 from src.settings.conf import log
 from src.utils.redis_conn import redis_client
+from src.utils.rmq.RabbitModel import rmq
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup
     log.info("🔌 Connecting to Redis...")
+    await rmq.connect()
+    await rmq.create_queue("webhook_messages")
+
+    task = asyncio.create_task(rmq.consume_messages())
     yield
+    task.cancel()
     # shutdown
     log.info("🛑 Closing Redis connection...")
     await redis_client.close()
+    await rmq.close()
 
 
 app = FastAPI(
@@ -35,6 +44,7 @@ async def root():
 
 app.include_router(router=webhook_router)
 app.include_router(router=amocrm_router)
+app.include_router(router=rmq_router)
 
 
 if __name__ == "__main__":

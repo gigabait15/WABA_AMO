@@ -1,14 +1,14 @@
-import datetime
 import json
 from urllib.parse import parse_qs, unquote_plus
 
-from fastapi import APIRouter, HTTPException, Request, Response, status, Query
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
+from src.database.DAO.crud import DealsDAO, MessagesDAO
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient, incoming_message, send_message
-from waba_api.src.schemas.AmoSchemas import TemplateSchemas
 from src.utils.meta.utils_message import MetaClient
-from src.database.DAO.crud import MessagesDAO, DealsDAO
+from src.utils.rmq.RabbitModel import rmq
+from waba_api.src.schemas.AmoSchemas import TemplateSchemas
 
 router = APIRouter(prefix="/amo", tags=["amoCRM"])
 amo = AmoCRMClient()
@@ -56,6 +56,9 @@ async def incoming_message_webhook(request: Request):
     is_from_manager = True if "ref_id" not in sender else False
     is_template = True if message.get("template") else False
     temp_id = message.get("template").get("external_id") if is_template else None
+
+    await rmq.send_message("webhook_messages", f"meta:{message_data}")
+
     if is_from_manager:
         try:
             await send_message(temp_id, chat_id, text, receiver.get("phone"))

@@ -1,17 +1,18 @@
 from datetime import datetime
+from enum import Enum as PyEnum
 
 from sqlalchemy import (
+    UUID,
     BigInteger,
     DateTime,
-    UUID,
-    Text,
-    String,
-    ForeignKey,
     Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from enum import Enum as PyEnum
 
 from src.database.models.base import Base
 
@@ -62,3 +63,9 @@ class OperatorsData(Base):
     account_id: Mapped[int] = mapped_column(BigInteger, index=True)
     number_id: Mapped[int] = mapped_column(BigInteger, index=True)
     number: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class MessageRecord(Base):
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String)
+    content: Mapped[str] = mapped_column(Text)
