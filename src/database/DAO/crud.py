@@ -1,6 +1,7 @@
-from typing import Any, Optional, Type
+from typing import Any, Optional, Type, List, Coroutine, Sequence, Union
+from uuid import UUID
 
-from sqlalchemy import asc, desc, select
+from sqlalchemy import asc, desc, select, Row, RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.base import Base
@@ -51,7 +52,7 @@ class BaseDAO:
             return result.scalars().all()
 
     @classmethod
-    async def find_item_by_id(cls, item_id: int) -> Optional[Base]:
+    async def find_item_by_id(cls, item_id: Union[int, UUID, str]) -> Optional[Base]:
         async with await cls.get_session() as session:
             result = await session.execute(select(cls.model).filter_by(id=item_id))
             return result.scalar_one_or_none()
@@ -96,6 +97,14 @@ class MessagesDAO(BaseDAO):
             return await cls.update(values["id"], **values)
         return await cls.add(**values)
 
+    @classmethod
+    async def get_message_by_deal(cls, deal_id: UUID) -> Sequence[Row[Any] | RowMapping | Any]:
+        async with await cls.get_session() as session:
+            result = await session.execute(
+                select(cls.model).filter_by(deals_id=deal_id).order_by(cls.model.timestamp)
+            )
+            return result.scalars().all()
+
 
 class DealsDAO(BaseDAO):
     model = Deals
@@ -120,7 +129,7 @@ class DealsDAO(BaseDAO):
             return new_instance
 
     @classmethod
-    async def find_id(cls, client_phone: str, operator_phone: str) -> Optional[Deals]:
+    async def find_by_phones(cls, client_phone: str, operator_phone: str) -> Optional[Deals]:
         async with await cls.get_session() as session:
             query = select(cls.model).where(
                 cls.model.client_phone == client_phone,

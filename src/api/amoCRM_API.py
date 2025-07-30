@@ -9,6 +9,7 @@ from src.utils.amo.chat import AmoCRMClient, incoming_message, send_message
 from src.utils.meta.utils_message import MetaClient
 from src.utils.rmq.RabbitModel import rmq
 from waba_api.src.schemas.AmoSchemas import TemplateSchemas
+from src.utils.redis_conn import redis_client
 
 router = APIRouter(prefix="/amo", tags=["amoCRM"])
 amo = AmoCRMClient()
@@ -63,6 +64,7 @@ async def incoming_message_webhook(request: Request):
         try:
             await send_message(temp_id, chat_id, text, receiver.get("phone"))
             log.info(f"[AMO ----]  {message_data}\n {message_id}")
+            await redis_client.rpush("amo_to_meta", json.dumps({"text": text}))
 
         except Exception as e:
             log.exception(f"[AMO→Webhook] Ошибка обработки: {e}")

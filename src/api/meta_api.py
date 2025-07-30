@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import httpx
 from fastapi import (
@@ -28,6 +28,10 @@ from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
 from src.utils.meta.utils_message import MetaClient
 from src.utils.rmq.RabbitModel import rmq
+
+from src.utils.redis_conn import redis_client
+
+from waba_api.src.schemas.MetaSchemas import MessageOut
 
 db = MessagesDAO()
 service = MetaClient()
@@ -146,9 +150,12 @@ async def incoming(request: Request) -> str:
                 operator_phone=operator_number,
             )
 
+            raw_data = await redis_client.lpop("amo_to_meta")
+
             await messagesDAO.upsert(
                 id=value.get("statuses")[0].get("id"),
                 sender=user_number,
+                text=json.loads(raw_data),
                 timestamp=dt_obj,
                 deals_id=deal_id.id,
                 status=message_status,
@@ -315,3 +322,25 @@ async def success_number(
     return service.confirm_phone_number(
         phone_number_id=phone_data.phone_number_id, confirm_code=phone_data.confirm_code
     )
+
+
+@router.get(
+    "/history",
+    status_code=status.HTTP_200_OK,
+    summary="Получение истории сообщений",
+    description="Запрос на получение истории сообщений клиента по связке клиент-оператор",
+    response_model=List[MessageOut]
+)
+async def get_history(
+    client_phone: str = Query(..., description="Телефон клиента"),
+    operator_phone: str = Query(..., description="Телефон оператора"),
+):
+    deal = dealsDAO.find_by_phones(client_phone, operator_phone)
+
+    if not deal:
+        raise HTTPException(
+            status_code=404,
+            detail="Связка клиент-оператор не найдена"
+        )
+    messages = messagesDAO.get_message_by_deal(deal.id)
+    return messages

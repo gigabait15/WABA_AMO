@@ -1,3 +1,7 @@
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, Field, validator
 
 
@@ -40,3 +44,20 @@ class SuccessPhoneNumber(BaseModel):
     verification_code: str = Field(
         ..., description="отправленный код на номер указанный при регистрации"
     )
+
+class StatusEnum(str, Enum):
+    sent = "sent"
+    delivered = "delivered"
+    read = "read"
+
+
+class MessageOut(BaseModel):
+    id: str
+    sender: str
+    text: Optional[str]
+    media: Optional[str]
+    timestamp: datetime
+    status: StatusEnum
+
+    class Config:
+        orm_mode = True

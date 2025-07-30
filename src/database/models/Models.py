@@ -34,7 +34,7 @@ class Messages(Base):
     )
 
     template_id: Mapped[int] = mapped_column(ForeignKey("templates.id"), nullable=True)
-    deals_id: Mapped[int] = mapped_column(ForeignKey("deals.id"), nullable=False)
+    deals_id: Mapped[UUID] = mapped_column(ForeignKey("deals.id"), nullable=False)
     deal = relationship("Deals", back_populates="messages")
 
 
