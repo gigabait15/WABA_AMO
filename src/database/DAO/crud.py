@@ -137,6 +137,11 @@ class DealsDAO(BaseDAO):
             )
             result = await session.execute(query)
             return result.scalars().first()
+        
+    @classmethod
+    async def find_id(cls, client_phone: str, operator_phone: str) -> Optional[int]:
+        deal = await cls.find_by_phones(client_phone, operator_phone)
+        return deal.id if deal else None
 
 
 class TemplatesDAO(BaseDAO):

@@ -1,12 +1,62 @@
 import logging
+import logging.handlers
 from pathlib import Path
 from typing import Dict
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Создаем директорию для логов если её нет
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+
+# Настраиваем логгер
 log = logging.getLogger("uvicorn.error")
 log.setLevel(logging.DEBUG)
+
+# Удаляем существующие обработчики, если они есть
+for handler in log.handlers[:]:
+    log.removeHandler(handler)
+
+# Создаем форматтер
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(funcName)s - %(lineno)d - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# Обработчик для записи в файл с ротацией
+file_handler = logging.handlers.RotatingFileHandler(
+    "logs/api_log.log",
+    maxBytes=10485760,  # 10MB
+    backupCount=5,
+    encoding="utf-8"
+)
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+
+# Обработчик для записи только ошибок
+error_handler = logging.handlers.RotatingFileHandler(
+    "logs/error.log",
+    maxBytes=10485760,  # 10MB
+    backupCount=5,
+    encoding="utf-8"
+)
+error_handler.setLevel(logging.ERROR)
+error_handler.setFormatter(formatter)
+
+# Обработчик для консоли
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(console_formatter)
+
+# Добавляем обработчики к логгеру
+log.addHandler(file_handler)
+log.addHandler(error_handler)
+log.addHandler(console_handler)
+
+# Предотвращаем дублирование логов
+log.propagate = False
 
 load_dotenv()
 

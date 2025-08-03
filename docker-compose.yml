@@ -4,6 +4,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/code
+      - ./logs:/code/logs
     env_file:
       - .env
       - .env.redis
@@ -23,6 +24,7 @@ services:
     command: alembic upgrade head
     volumes:
       - .:/code
+      - ./logs:/code/logs
     env_file:
       - .env
     depends_on:
