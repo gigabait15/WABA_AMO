@@ -43,7 +43,6 @@ async def receive_amocrm_webhook(request: Request):
 
 @router.post("/webhook/incoming-message/{scope_id}", status_code=status.HTTP_200_OK)
 async def incoming_message_webhook(scope_id: str, request: Request, rmq: AsyncRabbitMQRepository = Depends(get_rmq_dependency)):
-    log.info(f"[AMO] Incoming message")
     (
         message_data,
         message,
