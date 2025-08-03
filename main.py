@@ -10,7 +10,7 @@ from src.api.meta_api import router as webhook_router
 from src.api.rmq_api import router as rmq_router
 from src.settings.conf import log
 from src.utils.redis_conn import redis_client
-from src.utils.rmq.RabbitModel import rmq
+from src.utils.rmq.RabbitModel import rmq, callback_wrapper
 
 
 @asynccontextmanager
@@ -20,9 +20,8 @@ async def lifespan(app: FastAPI):
     await rmq.connect()
     await rmq.create_queue("webhook_messages")
 
-    task = asyncio.create_task(rmq.consume_messages())
+    asyncio.create_task(rmq.consume_messages("queue_name", callback_wrapper))
     yield
-    task.cancel()
     # shutdown
     log.info("🛑 Closing Redis connection...")
     await redis_client.close()

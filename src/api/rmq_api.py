@@ -1,11 +1,9 @@
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import aio_pika
 
-from src.database.DAO.crud import MessageRecordDAO
-from src.utils.rmq.consumer import latest_message
 from src.utils.rmq.RabbitModel import rmq
 
-rmqSession = MessageRecordDAO
+from src.settings.conf import log
 
 router = APIRouter(prefix="/rmq", tags=["RabbitMQ"])
 
@@ -14,18 +12,29 @@ router = APIRouter(prefix="/rmq", tags=["RabbitMQ"])
 async def websocket_endpoint(websocket: WebSocket, chat_id: str):
     await websocket.accept()
 
-    await rmq.conntect()
-    channel = rmq.channel()
+    try:
+        await rmq.connect()
+        channel = rmq.channel
 
-    exchange = await rmq.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
+        exchange = await channel.declare_exchange(
+            "chat_exchange",
+            aio_pika.ExchangeType.DIRECT,
+            durable=True,
+            auto_delete=False,
+        )
 
-    queue = await channel.declare_queue(exclusive=True, auto_delete=True)
-    await queue.bind(exchange, routing_key=chat_id)
+        queue = await channel.declare_queue(exclusive=True, auto_delete=True)
 
-    async with queue.iterator() as queue_iter:
-        async for message in queue_iter:
-            async with message.process():
-                await websocket.send_text(message.body.decode())
+        await queue.bind(exchange, routing_key=chat_id)
 
-    await rmq.close()
+        async with queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                async with message.process():
+                    await websocket.send_text(message.body.decode())
 
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.error(f"[WebSocket] Ошибка: {e}")
+    finally:
+        await rmq.close()

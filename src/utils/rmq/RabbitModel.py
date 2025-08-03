@@ -62,8 +62,8 @@ class AsyncRabbitMQRepository:
             routing_key=queue_name if self.use_default_exchange else "",
         )
 
-    async def consume_messages(self, queue_name: str, callback: Callable):
-        """Начинает прослушивание очереди с вызовом callback для каждого сообщения."""
+    async def consume_messages(self, queue_name: str, callback: Callable[[str, str], None]):
+        """Начинает прослушивание очереди с вызовом callback(chat_id, message_body)."""
         if not self.channel:
             await self.connect()
         if not self.exchange:
@@ -73,8 +73,13 @@ class AsyncRabbitMQRepository:
             async for message in queue_iter:
                 try:
                     async with message.process():
-                        await callback(message.body.decode())
-                except Exception as e:
+                        body = message.body.decode()
+                        import json
+                        data = json.loads(body)
+                        chat_id = str(data.get("chat_id"))
+                        if chat_id:
+                            await callback(chat_id, body)
+                except Exception:
                     log.error(f"[RMQ] {traceback.format_exc()}")
 
     async def delete_queue(self, queue_name: str):
@@ -146,11 +151,5 @@ class AsyncRabbitMQRepository:
 
 rmq = AsyncRabbitMQRepository()
 
-async def process_incoming_message(body: str):
-    import json
-    data = json.loads(body)
-    chat_id = str(data.get("chat_id"))
-
-    if chat_id:
-        await rmq.publish_to_chat(chat_id, body)
-
+async def callback_wrapper(chat_id: str, message_body: str):
+        await rmq.publish_to_chat(chat_id, message_body)
