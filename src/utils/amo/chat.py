@@ -334,7 +334,7 @@ class AmoCRMClient:
                 "silent": False,
                 "sender": {
                     "id": sender_id,
-                    "name": f"{conversation_id}",
+                    "name": f"{phone}",
                     "profile": {"phone": phone},
                 },
                 "message": {"type": "text", "text": text},
@@ -419,8 +419,6 @@ class AmoCRMClient:
                 operator_phone=operator_phone,
                 created_at=datetime.fromtimestamp(int(timestamp)),
             )
-
-            await self.connect_channel()
 
         except Exception as e:
             log.exception(f"[AmoCRM] Ошибка в ensure_chat_visible: {str(e)}")
