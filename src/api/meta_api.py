@@ -131,7 +131,7 @@ async def incoming(request: Request) -> str:
                     sender=user_number,
                     text=text,
                     timestamp=dt_obj,
-                    deals_id=deal_id.id,
+                    deals_id=deal_id,
                 )
 
         # TODO Сообщение отправенное пользователю
@@ -158,7 +158,7 @@ async def incoming(request: Request) -> str:
                 sender=user_number,
                 text=json.loads(raw_data),
                 timestamp=dt_obj,
-                deals_id=deal_id.id,
+                deals_id=deal_id,
                 status=message_status,
             )
 
