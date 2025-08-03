@@ -5,7 +5,7 @@
 __pycache__/
 *.pyc
 src/database/migrations/versions/*.py
-
+.data
 
 
 
