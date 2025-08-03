@@ -41,7 +41,7 @@ async def receive_amocrm_webhook(request: Request):
     return {"status": "ok"}
 
 
-@router.post("/webhook/incoming-message", status_code=status.HTTP_200_OK)
+@router.post("/webhook/incoming-message/:scope_id", status_code=status.HTTP_200_OK)
 async def incoming_message_webhook(request: Request):
     (
         message_data,
@@ -57,8 +57,6 @@ async def incoming_message_webhook(request: Request):
     is_from_manager = True if "ref_id" not in sender else False
     is_template = True if message.get("template") else False
     temp_id = message.get("template").get("external_id") if is_template else None
-
-    await rmq.send_message("webhook_messages", f"meta:{message_data}")
 
     if is_from_manager:
         try:

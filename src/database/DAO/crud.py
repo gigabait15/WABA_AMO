@@ -1,4 +1,4 @@
-from typing import Any, Optional, Type, List, Coroutine, Sequence, Union
+from typing import Any, Optional, Type,  Sequence, Union
 from uuid import UUID
 
 from sqlalchemy import asc, desc, select, Row, RowMapping

@@ -19,22 +19,22 @@ class AsyncRabbitMQRepository:
         self.exchange = None
         self.exchange_name = exchange_name
 
-    async def connect(self, need_create_exchange: bool = True):
+    async def connect(self):
         """Устанавливает асинхронное соединение с RabbitMQ."""
         self.connection = await aio_pika.connect_robust(
             host=self.host, port=self.port, login=self.user, password=self.password
         )
         self.channel = await self.connection.channel()
-        if need_create_exchange:
-            await self.declare_exchange()
 
-    async def declare_exchange(self):
+
+    async def declare_exchange(self, exch_name = None, con_type = aio_pika.ExchangeType.FANOUT):
+        name = exch_name if exch_name is not None else self.exchange_name
         if self.use_default_exchange:
             self.exchange = self.channel.default_exchange
         else:
             self.exchange = await self.channel.declare_exchange(
-                self.exchange_name,
-                type=aio_pika.ExchangeType.FANOUT,
+                name=name,
+                type=con_type,
                 durable=True,
                 auto_delete=True,
             )
@@ -77,14 +77,6 @@ class AsyncRabbitMQRepository:
                 except Exception as e:
                     log.error(f"[RMQ] {traceback.format_exc()}")
 
-    async def close(self):
-        """Закрывает соединение с RabbitMQ."""
-        try:
-            if self.connection and not self.connection.is_closed:
-                await self.connection.close()
-        except Exception:
-            log.error(f"[RMQ] {traceback.format_exc()}")
-
     async def delete_queue(self, queue_name: str):
         """Удаляет очередь с указанным именем."""
         if not self.channel:
@@ -114,7 +106,7 @@ class AsyncRabbitMQRepository:
         Возвращает True, если обменник существует, иначе False.
         """
         if not self.connection or self.connection.is_closed:
-            await self.connect(need_create_exchange=False)
+            await self.connect()
 
         try:
             await self.channel.declare_exchange(exchange_name, passive=True)
@@ -122,6 +114,43 @@ class AsyncRabbitMQRepository:
         except Exception as ex:
             if "NOT_FOUND" in str(ex):
                 return False
+            return False
+
+
+    async def declare_chat_exchange(self):
+        self.channel = await self.connection.channel()
+        await self.channel.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
+
+
+    async def publish_to_chat(self, chat_id: str, message: str):
+        if not self.channel:
+            await self.connect()
+        if not self.exchange:
+            await self.declare_exchange()
+        await self.connection.channel()
+        await self.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
+        await self.exchange.publish(
+            aio_pika.Message(body=message.encode()),
+            routing_key=chat_id,
+        )
+        await self.close()
+
+    async def close(self):
+        """Закрывает соединение с RabbitMQ."""
+        try:
+            if self.connection and not self.connection.is_closed:
+                await self.connection.close()
+        except Exception:
+            log.error(f"[RMQ] {traceback.format_exc()}")
 
 
 rmq = AsyncRabbitMQRepository()
+
+async def process_incoming_message(body: str):
+    import json
+    data = json.loads(body)
+    chat_id = str(data.get("chat_id"))
+
+    if chat_id:
+        await rmq.publish_to_chat(chat_id, body)
+

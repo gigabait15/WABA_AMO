@@ -96,8 +96,6 @@ async def incoming(request: Request) -> str:
         changes = data["changes"][0]
         value = changes.get("value")
 
-        await rmq.send_message("webhook_messages", f"meta:{value}")
-
         # TODO Сообщение от пользователя
         if value.get("contacts") is not None:
             user_number = value.get("messages")[0].get("from")
@@ -113,6 +111,7 @@ async def incoming(request: Request) -> str:
                     operator_number,
                     text,
                 )
+                await rmq.publish_to_chat(f'{user_number}-{operator_number}', text)
 
                 client = AmoCRMClient()
                 await client.ensure_chat_visible(
@@ -151,6 +150,8 @@ async def incoming(request: Request) -> str:
             )
 
             raw_data = await redis_client.lpop("amo_to_meta")
+
+            await rmq.publish_to_chat(f'{user_number}-{operator_number}', json.loads(raw_data))
 
             await messagesDAO.upsert(
                 id=value.get("statuses")[0].get("id"),
