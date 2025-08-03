@@ -31,7 +31,7 @@ from src.utils.rmq.RabbitModel import rmq
 
 from src.utils.redis_conn import redis_client
 
-from waba_api.src.schemas.MetaSchemas import MessageOut
+from src.schemas.MetaSchemas import MessageOut
 
 db = MessagesDAO()
 service = MetaClient()
