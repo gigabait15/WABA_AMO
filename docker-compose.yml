@@ -55,7 +55,7 @@ services:
       - .env.rmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     restart: always
     volumes:
       - ./data/rabbit_data:/var/lib/rabbitmq/mnesia
