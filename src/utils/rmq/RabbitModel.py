@@ -41,7 +41,7 @@ class AsyncRabbitMQRepository:
 
     async def create_queue(self, queue_name: str) -> str:
         """Создает очередь с указанным именем."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         if not self.exchange:
             await self.declare_exchange()
@@ -52,7 +52,7 @@ class AsyncRabbitMQRepository:
 
     async def send_message(self, queue_name: str, message: str):
         """Отправляет сообщение в указанную очередь."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         if not self.exchange:
             await self.declare_exchange()
@@ -64,7 +64,7 @@ class AsyncRabbitMQRepository:
 
     async def consume_messages(self, queue_name: str, callback: Callable[[str, str], None]):
         """Начинает прослушивание очереди с вызовом callback(chat_id, message_body)."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         if not self.exchange:
             await self.declare_exchange()
@@ -84,7 +84,7 @@ class AsyncRabbitMQRepository:
 
     async def delete_queue(self, queue_name: str):
         """Удаляет очередь с указанным именем."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         try:
             queue = await self.channel.get_queue(queue_name)
@@ -94,7 +94,7 @@ class AsyncRabbitMQRepository:
 
     async def queue_exists(self, queue_name: str) -> bool:
         """Проверяет существование очереди по имени."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         try:
             await self.channel.get_queue(queue_name)
@@ -128,7 +128,7 @@ class AsyncRabbitMQRepository:
 
 
     async def publish_to_chat(self, chat_id: str, message: str):
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         if not self.exchange:
             await self.declare_exchange()
