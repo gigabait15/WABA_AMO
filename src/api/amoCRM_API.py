@@ -8,7 +8,7 @@ from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient, incoming_message, send_message
 from src.utils.meta.utils_message import MetaClient
 from src.utils.rmq.RabbitModel import rmq, callback_wrapper
-from waba_api.src.schemas.AmoSchemas import TemplateSchemas
+from src.schemas.AmoSchemas import TemplateSchemas
 from src.utils.redis_conn import redis_client
 
 router = APIRouter(prefix="/amo", tags=["amoCRM"])
