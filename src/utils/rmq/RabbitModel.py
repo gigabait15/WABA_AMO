@@ -5,7 +5,10 @@ from contextlib import asynccontextmanager
 import aio_pika
 from aiormq import exceptions as aiormq_exceptions
 
-from src.settings.conf import log, rmqsetting
+from src.settings.conf import rmqsetting
+from src.settings.logger_config import get_logger
+
+log = get_logger(__name__)
 
 
 class AsyncRabbitMQRepository:
