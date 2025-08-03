@@ -94,3 +94,36 @@ def setup_main_logger(logger_name: str = "uvicorn.error") -> logging.Logger:
     
     return logger
 
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    Создает и настраивает логгер с правильными обработчиками и форматированием.
+    
+    Args:
+        name: Имя логгера (обычно __name__ модуля)
+    
+    Returns:
+        Настроенный логгер
+    """
+    logger = logging.getLogger(name)
+    
+    # Если логгер уже настроен, возвращаем его
+    if logger.handlers:
+        return logger
+    
+    logger.setLevel(logging.DEBUG)
+    
+    # Создаем форматтер с функцией и номером строки
+    formatter = create_formatter()
+    
+    # Обработчик для записи в файл
+    file_handler = create_file_handler(formatter)
+    
+    # Обработчик для консоли
+    console_handler = create_console_handler(formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    logger.propagate = False
+    
+    return logger
