@@ -4,7 +4,7 @@ import httpx
 
 from src.database.DAO.crud import MessageRecordDAO
 from src.settings.conf import log
-from waba_api.src.utils.rmq.RabbitModel import rmq
+from src.utils.rmq.RabbitModel import get_rmq_instance
 
 session = MessageRecordDAO()
 
@@ -13,6 +13,7 @@ latest_message = {"data": None}
 
 
 async def consume_messages():
+    rmq = get_rmq_instance()
     async def handle_message(msg: str):
         try:
             source, content = msg.split(":", 1)

@@ -10,13 +10,14 @@ from src.api.meta_api import router as webhook_router
 from src.api.rmq_api import router as rmq_router
 from src.settings.conf import log
 from src.utils.redis_conn import redis_client
-from src.utils.rmq.RabbitModel import rmq, callback_wrapper
+from src.utils.rmq.RabbitModel import get_rmq_instance, callback_wrapper, cleanup_rmq
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup
     log.info("🔌 Connecting to Redis...")
+    rmq = get_rmq_instance()
     await rmq.connect()
     await rmq.create_queue("webhook_messages")
 
@@ -25,7 +26,7 @@ async def lifespan(app: FastAPI):
     # shutdown
     log.info("🛑 Closing Redis connection...")
     await redis_client.close()
-    await rmq.close()
+    await cleanup_rmq()
 
 
 app = FastAPI(

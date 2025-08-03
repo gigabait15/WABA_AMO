@@ -27,7 +27,7 @@ from src.schemas.MetaSchemas import (
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient
 from src.utils.meta.utils_message import MetaClient
-from src.utils.rmq.RabbitModel import rmq
+from src.utils.rmq.RabbitModel import get_rmq_dependency, AsyncRabbitMQRepository
 
 from src.utils.redis_conn import redis_client
 
@@ -74,7 +74,7 @@ async def verify(
 
 
 @router.post("/webhook", status_code=status.HTTP_200_OK)
-async def incoming(request: Request) -> str:
+async def incoming(request: Request, rmq: AsyncRabbitMQRepository = Depends(get_rmq_dependency)) -> str:
     """
     Обрабатывает входящие сообщения от Cloud API.
     * Парсим JSON-payload;

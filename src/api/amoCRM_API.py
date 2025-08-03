@@ -1,13 +1,13 @@
 import json
 from urllib.parse import parse_qs, unquote_plus
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status, Depends
 
 from src.database.DAO.crud import DealsDAO, MessagesDAO
 from src.settings.conf import log, metasettings
 from src.utils.amo.chat import AmoCRMClient, incoming_message, send_message
 from src.utils.meta.utils_message import MetaClient
-from src.utils.rmq.RabbitModel import rmq, callback_wrapper
+from src.utils.rmq.RabbitModel import get_rmq_dependency, callback_wrapper, AsyncRabbitMQRepository
 from src.schemas.AmoSchemas import TemplateSchemas
 from src.utils.redis_conn import redis_client
 
@@ -42,7 +42,7 @@ async def receive_amocrm_webhook(request: Request):
 
 
 @router.post("/webhook/incoming-message/:scope_id", status_code=status.HTTP_200_OK)
-async def incoming_message_webhook(request: Request):
+async def incoming_message_webhook(request: Request, rmq: AsyncRabbitMQRepository = Depends(get_rmq_dependency)):
     (
         message_data,
         message,
