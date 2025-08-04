@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import aio_pika
 
-from src.utils.rmq.RabbitModel import rmq
+from src.utils.rmq.RabbitModel import get_rmq_dependency, AsyncRabbitMQRepository
 
 from src.settings.conf import log
 
@@ -11,6 +11,7 @@ router = APIRouter(prefix="/rmq", tags=["RabbitMQ"])
 @router.websocket("/ws/chat/{chat_id}")
 async def websocket_endpoint(websocket: WebSocket, chat_id: str):
     await websocket.accept()
+    rmq = get_rmq_dependency()
 
     try:
         await rmq.connect()
@@ -37,4 +38,4 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
     except Exception as e:
         log.error(f"[WebSocket] Ошибка: {e}")
     finally:
-        await rmq.close()
+        pass

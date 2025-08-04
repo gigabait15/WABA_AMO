@@ -1,12 +1,14 @@
 import logging
+import logging.handlers
 from pathlib import Path
 from typing import Dict
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-log = logging.getLogger("uvicorn.error")
-log.setLevel(logging.DEBUG)
+from .logger_config import setup_main_logger
+
+log = setup_main_logger()
 
 load_dotenv()
 
@@ -23,6 +25,7 @@ class DBSettings(BaseSettings):
         env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
 

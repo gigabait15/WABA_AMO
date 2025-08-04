@@ -4,6 +4,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/code
+      - ./logs:/code/logs
     env_file:
       - .env
       - .env.redis
@@ -23,6 +24,7 @@ services:
     command: alembic upgrade head
     volumes:
       - .:/code
+      - ./logs:/code/logs
     env_file:
       - .env
     depends_on:
@@ -41,7 +43,7 @@ services:
       - "5433:5432"
 
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
@@ -55,7 +57,7 @@ services:
       - .env.rmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     restart: always
     volumes:
       - ./data/rabbit_data:/var/lib/rabbitmq/mnesia

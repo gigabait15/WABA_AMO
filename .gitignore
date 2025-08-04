@@ -4,3 +4,10 @@
 .idea/
 __pycache__/
 *.pyc
+src/database/migrations/versions/*.py
+.data
+logs/*.log
+logs/*.log.*
+
+
+

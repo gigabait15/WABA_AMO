@@ -28,7 +28,7 @@ class DBConnection:
             f"postgresql+asyncpg://{self.settings.DB_USER}:{self.settings.DB_PASSWORD}"
             f"@{self.settings.DB_HOST}:{self.settings.DB_PORT}/{self.settings.DB_NAME}"
         )
-        return create_async_engine(link, echo=True)
+        return create_async_engine(link, echo=False)
 
     def init_engine(self) -> Engine:
         """
@@ -39,7 +39,7 @@ class DBConnection:
             f"postgresql+psycopg://{self.settings.DB_USER}:{self.settings.DB_PASSWORD}"
             f"@{self.settings.DB_HOST}:{self.settings.DB_PORT}/{self.settings.DB_NAME}"
         )
-        return create_engine(link, isolation_level="AUTOCOMMIT", echo=True)
+        return create_engine(link, isolation_level="AUTOCOMMIT", echo=False)
 
     def async_session_maker(self) -> async_sessionmaker[AsyncSession]:
         """

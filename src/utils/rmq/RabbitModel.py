@@ -1,10 +1,14 @@
 import traceback
 from typing import Callable, Optional
+from contextlib import asynccontextmanager
 
 import aio_pika
 from aiormq import exceptions as aiormq_exceptions
 
-from src.settings.conf import log, rmqsetting
+from src.settings.conf import rmqsetting
+from src.settings.logger_config import get_logger
+
+log = get_logger(__name__)
 
 
 class AsyncRabbitMQRepository:
@@ -21,10 +25,21 @@ class AsyncRabbitMQRepository:
 
     async def connect(self):
         """Устанавливает асинхронное соединение с RabbitMQ."""
-        self.connection = await aio_pika.connect_robust(
-            host=self.host, port=self.port, login=self.user, password=self.password
-        )
-        self.channel = await self.connection.channel()
+        if self.connection is None or self.connection.is_closed:
+            self.connection = await aio_pika.connect_robust(
+                host=self.host, port=self.port, login=self.user, password=self.password
+            )
+        if self.channel is None or self.channel.is_closed:
+            self.channel = await self.connection.channel()
+
+    @asynccontextmanager
+    async def get_connection(self):
+        """Context manager для автоматического управления соединением."""
+        await self.connect()
+        try:
+            yield self
+        finally:
+            pass
 
 
     async def declare_exchange(self, exch_name = None, con_type = aio_pika.ExchangeType.FANOUT):
@@ -41,7 +56,7 @@ class AsyncRabbitMQRepository:
 
     async def create_queue(self, queue_name: str) -> str:
         """Создает очередь с указанным именем."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         if not self.exchange:
             await self.declare_exchange()
@@ -52,19 +67,18 @@ class AsyncRabbitMQRepository:
 
     async def send_message(self, queue_name: str, message: str):
         """Отправляет сообщение в указанную очередь."""
-        if not self.channel:
-            await self.connect()
-        if not self.exchange:
-            await self.declare_exchange()
+        async with self.get_connection():
+            if not self.exchange:
+                await self.declare_exchange()
 
-        await self.exchange.publish(
-            aio_pika.Message(body=message.encode()),
-            routing_key=queue_name if self.use_default_exchange else "",
-        )
+            await self.exchange.publish(
+                aio_pika.Message(body=message.encode()),
+                routing_key=queue_name if self.use_default_exchange else "",
+            )
 
     async def consume_messages(self, queue_name: str, callback: Callable[[str, str], None]):
         """Начинает прослушивание очереди с вызовом callback(chat_id, message_body)."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         if not self.exchange:
             await self.declare_exchange()
@@ -84,7 +98,7 @@ class AsyncRabbitMQRepository:
 
     async def delete_queue(self, queue_name: str):
         """Удаляет очередь с указанным именем."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         try:
             queue = await self.channel.get_queue(queue_name)
@@ -94,7 +108,7 @@ class AsyncRabbitMQRepository:
 
     async def queue_exists(self, queue_name: str) -> bool:
         """Проверяет существование очереди по имени."""
-        if not self.channel:
+        if not self.channel or not self.connection:
             await self.connect()
         try:
             await self.channel.get_queue(queue_name)
@@ -128,17 +142,16 @@ class AsyncRabbitMQRepository:
 
 
     async def publish_to_chat(self, chat_id: str, message: str):
-        if not self.channel:
-            await self.connect()
-        if not self.exchange:
-            await self.declare_exchange()
-        await self.connection.channel()
-        await self.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
-        await self.exchange.publish(
-            aio_pika.Message(body=message.encode()),
-            routing_key=chat_id,
-        )
-        await self.close()
+        """Отправляет сообщение в чат через exchange."""
+        async with self.get_connection():
+            if not self.exchange:
+                await self.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
+            
+            # Используем exchange для отправки сообщения
+            await self.exchange.publish(
+                aio_pika.Message(body=message.encode()),
+                routing_key=chat_id,
+            )
 
     async def close(self):
         """Закрывает соединение с RabbitMQ."""
@@ -149,7 +162,29 @@ class AsyncRabbitMQRepository:
             log.error(f"[RMQ] {traceback.format_exc()}")
 
 
-rmq = AsyncRabbitMQRepository()
+# Глобальный экземпляр для переиспользования соединений
+_rmq_instance: Optional[AsyncRabbitMQRepository] = None
+
+def get_rmq_instance() -> AsyncRabbitMQRepository:
+    """Возвращает singleton экземпляр AsyncRabbitMQRepository."""
+    global _rmq_instance
+    if _rmq_instance is None:
+        _rmq_instance = AsyncRabbitMQRepository()
+    return _rmq_instance
+
+
+def get_rmq_dependency() -> AsyncRabbitMQRepository:
+    """Dependency функция для FastAPI для получения экземпляра RabbitMQ."""
+    return get_rmq_instance()
+
+
+async def cleanup_rmq():
+    """Очищает глобальный экземпляр RabbitMQ."""
+    global _rmq_instance
+    if _rmq_instance is not None:
+        await _rmq_instance.close()
+        _rmq_instance = None
 
 async def callback_wrapper(chat_id: str, message_body: str):
+        rmq = get_rmq_instance()
         await rmq.publish_to_chat(chat_id, message_body)

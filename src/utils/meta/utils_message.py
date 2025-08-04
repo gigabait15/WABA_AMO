@@ -22,7 +22,7 @@ class MetaClient:
     async def _response(self, method: str, url: str, **kwargs) -> Tuple[int, Any]:
         """Универсальный HTTP-запрос."""
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 request_method = getattr(client, method.lower())
                 log.debug(f"[META] Sending {method} to {url} | Payload: {kwargs}")
                 response = await request_method(url, headers=self.headers, **kwargs)
