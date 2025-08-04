@@ -111,7 +111,7 @@ async def incoming(request: Request, rmq: AsyncRabbitMQRepository = Depends(get_
                     operator_number,
                     text,
                 )
-                await rmq.publish_to_chat(f'{user_number}-{operator_number}', text)
+                await rmq.publish_to_chat(f'{user_number}-{operator_number}', json.dumps(value, ensure_ascii=False))
 
                 client = AmoCRMClient()
                 await client.ensure_chat_visible(
@@ -149,9 +149,9 @@ async def incoming(request: Request, rmq: AsyncRabbitMQRepository = Depends(get_
                 operator_phone=operator_number,
             )
 
-            raw_data = await redis_client.lpop("amo_to_meta")
+            raw_data = await redis_client.lpop(f"{user_number}")
 
-            await rmq.publish_to_chat(f'{user_number}-{operator_number}', json.loads(raw_data))
+            await rmq.publish_to_chat(f'{user_number}-{operator_number}', json.dumps(value, ensure_ascii=False))
 
             await messagesDAO.upsert(
                 id=value.get("statuses")[0].get("id"),

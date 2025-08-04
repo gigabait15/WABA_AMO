@@ -1,7 +1,7 @@
 import json
 from urllib.parse import parse_qs, unquote_plus
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status, Depends
+from fastapi import APIRouter, HTTPException, Request, Response, status, Depends
 
 from src.database.DAO.crud import DealsDAO, MessagesDAO
 from src.settings.conf import log, metasettings
@@ -72,7 +72,7 @@ async def incoming_message_webhook(scope_id: str, request: Request, rmq: AsyncRa
         try:
             await send_message(temp_id, chat_id, text, receiver.get("phone"))
             log.info(f"[AMO ----]  {message_data}\n {message_id}")
-            await redis_client.rpush("amo_to_meta", json.dumps({"text": text}))
+            await redis_client.rpush(f"{receiver.get("phone")}", json.dumps({"text": text}))
 
         except Exception as e:
             log.exception(f"[AMO→Webhook] Ошибка обработки: {e}")

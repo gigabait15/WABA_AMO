@@ -1,4 +1,5 @@
 import traceback
+import json
 from typing import Callable, Optional
 from contextlib import asynccontextmanager
 
@@ -41,8 +42,7 @@ class AsyncRabbitMQRepository:
         finally:
             pass
 
-
-    async def declare_exchange(self, exch_name = None, con_type = aio_pika.ExchangeType.FANOUT):
+    async def declare_exchange(self, exch_name=None, con_type=aio_pika.ExchangeType.FANOUT):
         name = exch_name if exch_name is not None else self.exchange_name
         if self.use_default_exchange:
             self.exchange = self.channel.default_exchange
@@ -135,23 +135,23 @@ class AsyncRabbitMQRepository:
                 return False
             return False
 
-
     async def declare_chat_exchange(self):
         self.channel = await self.connection.channel()
         await self.channel.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
 
-
     async def publish_to_chat(self, chat_id: str, message: str):
         """Отправляет сообщение в чат через exchange."""
-        async with self.get_connection():
-            if not self.exchange:
-                await self.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
-            
-            # Используем exchange для отправки сообщения
-            await self.exchange.publish(
-                aio_pika.Message(body=message.encode()),
-                routing_key=chat_id,
-            )
+        if not self.exchange:
+            await self.declare_exchange("chat_exchange", aio_pika.ExchangeType.DIRECT)
+        if isinstance(message, dict):
+            body_bytes = json.dumps(message, ensure_ascii=False).encode()
+        else:
+            body_bytes = message.encode()
+
+        await self.exchange.publish(
+            aio_pika.Message(body=body_bytes),
+            routing_key=chat_id,
+        )
 
     async def close(self):
         """Закрывает соединение с RabbitMQ."""
@@ -164,6 +164,7 @@ class AsyncRabbitMQRepository:
 
 # Глобальный экземпляр для переиспользования соединений
 _rmq_instance: Optional[AsyncRabbitMQRepository] = None
+
 
 def get_rmq_instance() -> AsyncRabbitMQRepository:
     """Возвращает singleton экземпляр AsyncRabbitMQRepository."""
@@ -185,6 +186,7 @@ async def cleanup_rmq():
         await _rmq_instance.close()
         _rmq_instance = None
 
+
 async def callback_wrapper(chat_id: str, message_body: str):
-        rmq = get_rmq_instance()
-        await rmq.publish_to_chat(chat_id, message_body)
+    rmq = get_rmq_instance()
+    await rmq.publish_to_chat(chat_id, message_body)
